@@ -11,7 +11,6 @@ mod backend;
 #[cfg(enarx_with_shim)]
 pub(crate) mod caching;
 mod cli;
-mod drawbridge;
 mod exec;
 #[cfg(enarx_with_shim)]
 mod protobuf;

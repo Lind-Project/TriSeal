@@ -193,6 +193,7 @@ impl<'a> Write for Handler<'a> {
         let len = buf.len();
         let mut written = 0;
         while written < len {
+            //debugln!(self, "write tempest kill {:?}", written);
             written += self
                 .write(STDERR_FILENO, &buf[written..])
                 .map_err(|_| core::fmt::Error)?;

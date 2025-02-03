@@ -253,7 +253,7 @@ impl super::super::Thread for Thread {
                                     dbg!(&_syscall);
                                 }
                             }
-
+                            // println!("Syscall: {:?}", _syscall);
                             sallyport::host::execute(iter::once(item))
                                 .map_err(io::Error::from_raw_os_error)
                                 .context("sallyport::host::execute")?;

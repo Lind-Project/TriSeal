@@ -1,18 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 mod config;
-mod deploy;
 #[cfg(enarx_with_shim)]
 mod key;
-mod package;
 mod platform;
-mod repo;
 mod run;
 #[cfg(enarx_with_shim)]
 mod sign;
 mod tree;
 mod unstable;
-mod user;
 
 #[cfg(enarx_with_shim)]
 use crate::backend::probe::x86_64::Vendor;
@@ -97,7 +93,7 @@ impl Options {
             // Open `/dev/null` to reserve fd 3 on Unix, which `exec-wasmtime` will expect to read config from
             // It will be dropped at the end of this block, freeing it for the following socketpair call
             #[cfg(unix)]
-            let _reserved = matches!(self.cmd, Subcommands::Run(_) | Subcommands::Deploy(_))
+            let _reserved = matches!(self.cmd, Subcommands::Run(_))
                 .then_some(File::open("/dev/null"))
                 .transpose()
                 .context("failed to open temporary directory")?;
@@ -129,21 +125,18 @@ impl Options {
                 profile,
             ),
             Subcommands::Config(cmd) => cmd.dispatch(),
-            Subcommands::Deploy(cmd) => cmd.execute(
-                #[cfg(unix)]
-                log_level,
-                #[cfg(all(unix, feature = "bench"))]
-                profile,
-            ),
+            // Subcommands::Deploy(cmd) => cmd.execute(
+            //     #[cfg(unix)]
+            //     log_level,
+            //     #[cfg(all(unix, feature = "bench"))]
+            //     profile,
+            // ),
             #[cfg(enarx_with_shim)]
             Subcommands::Key(cmd) => cmd.dispatch(),
             Subcommands::Platform(cmd) => cmd.dispatch(),
-            Subcommands::Package(cmd) => cmd.dispatch(),
-            Subcommands::Repo(cmd) => cmd.dispatch(),
             #[cfg(enarx_with_shim)]
             Subcommands::Sign(cmd) => cmd.execute(),
             Subcommands::Tree(cmd) => cmd.dispatch(),
-            Subcommands::User(cmd) => cmd.dispatch(),
             Subcommands::Unstable(cmd) => cmd.dispatch(),
             #[cfg(enarx_with_shim)]
             Subcommands::UpdateCache => {
@@ -188,7 +181,7 @@ impl Options {
 #[derive(Subcommand, Debug)]
 enum Subcommands {
     Run(run::Options),
-    Deploy(deploy::Options),
+    // Deploy(deploy::Options),
     #[clap(subcommand)]
     Config(config::Subcommands),
     #[cfg(enarx_with_shim)]
@@ -196,17 +189,11 @@ enum Subcommands {
     Key(key::Subcommands),
     #[clap(subcommand)]
     Platform(platform::Subcommands),
-    #[clap(subcommand)]
-    Package(package::Subcommands),
-    #[clap(subcommand)]
-    Repo(repo::Subcommands),
     #[cfg(enarx_with_shim)]
     #[clap(hide = true)]
     Sign(sign::Options),
     #[clap(subcommand, hide = true)]
     Tree(tree::Subcommands),
-    #[clap(subcommand)]
-    User(user::Subcommands),
     #[clap(subcommand, hide = true)]
     Unstable(unstable::Subcommands),
     #[cfg(enarx_with_shim)]

@@ -29,7 +29,6 @@ clap = { workspace = true }
 colorful = { workspace = true }
 der = { workspace = true }
 dirs = { workspace = true }
-drawbridge-client = { workspace = true }
 enarx-exec-wasmtime = { workspace = true }
 enarx-config = { workspace = true }
 hex = { workspace = true }
@@ -108,7 +107,6 @@ enarx_syscall_tests = { path = "tests/crates/enarx_syscall_tests", artifact = "b
 [target.'cfg(not(windows))'.dev-dependencies]
 async-h1 = { workspace = true }
 async-std = { workspace = true }
-drawbridge-server = { workspace = true }
 futures = { workspace = true }
 http-types = { workspace = true }
 
@@ -138,6 +136,9 @@ overflow-checks = true
 [profile.release.package.shared]
 overflow-checks = true
 
+[package.metadata.wasm-pack.profile.release]
+wasm-features = ["reference-types", "gc"]
+
 [workspace]
 members = ["crates/*", "tests/crates/*"]
 
@@ -159,8 +160,6 @@ const-oid = { version = "0.9.5", default-features = false }
 crt0stack = { version = "0.1.0", default-features = false }
 der = { version = "0.7.8", features = ["derive", "std"], default-features = false }
 dirs = { version = "4.0.0", default-features = false }
-drawbridge-client = { version = "0.2.2", default-features = false }
-drawbridge-server = { version = "0.2.2", default-features = false }
 enarx-exec-wasmtime = { version = "0.7.1", path = "crates/exec-wasmtime", default-features = false }
 enarx-config = { version = "0.7.1", path = "crates/enarx-config", default-features = false }
 futures = { version = "0.3.21", default-features = false }
@@ -230,10 +229,10 @@ zeroize = { version = "1.5.4", features = ["alloc"], default-features = false }
 
 # wasmtime and its pinned dependencies
 # these will need to be updated together
-wasmtime = { version = "5.0.1", features = ["cranelift", "pooling-allocator"], default-features = false }
-cap-std = { version = "1.0.0", default-features = false }
-io-lifetimes = { version = "1.0.0", default-features = false }
-rustix = { version = "0.36.0", features = ["std"], default-features = false }
-wasi-common = { version = "5.0.1", default-features = false }
-wasmtime-wasi = { version = "5.0.1", features = ["sync"], default-features = false }
-wiggle = { version = "5.0.1", default-features = false }
+wasmtime = { version = "23.0.0", features = ["cranelift", "pooling-allocator", "gc"], default-features = false }
+cap-std = { version = "3.4.2", default-features = false }
+io-lifetimes = { version = "2.0.4", default-features = false }
+rustix = { version = "0.38.44", features = ["std"], default-features = false }
+wasi-common = { version = "23.0.0", features = ["sync"] ,default-features = false }
+wasmtime-wasi = { version = "23.0.0", features = ["preview1"] , default-features = false }
+wiggle = { version = "23.0.0", default-features = false }

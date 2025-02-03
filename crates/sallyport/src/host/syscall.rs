@@ -371,6 +371,17 @@ pub(super) unsafe fn execute(call: &mut item::Syscall, data: &mut [u8]) -> Resul
 
         item::Syscall {
             num,
+            argv: [fd1, fd2, flags, ..],
+            ret: [ret, ..],
+        } if *num == libc::SYS_pipe2 as _ => Syscall {
+            num: libc::SYS_pipe2,
+            argv: [**[fd1 , fd2].as_mut_ptr(), *flags],
+            ret: [ret],
+        }
+        .execute(),
+
+        item::Syscall {
+            num,
             argv: [status, ..],
             ret: [ret, ..],
         } if *num == libc::SYS_exit as _ => Syscall {

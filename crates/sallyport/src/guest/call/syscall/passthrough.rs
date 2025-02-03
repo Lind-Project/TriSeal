@@ -5,7 +5,7 @@ use super::Alloc;
 use crate::guest::alloc::{Allocator, Collector};
 use crate::libc::{
     SYS_close, SYS_dup, SYS_dup2, SYS_dup3, SYS_epoll_create1, SYS_eventfd2, SYS_exit,
-    SYS_exit_group, SYS_listen, SYS_socket, SYS_sync,
+    SYS_exit_group, SYS_listen, SYS_socket, SYS_sync, epoll_event, SYS_epoll_ctl, SYS_pipe2
 };
 use crate::Result;
 
@@ -160,6 +160,29 @@ unsafe impl PassthroughAlloc for EpollCreate1 {
     }
 }
 
+// pub struct EpollCtl {
+//     pub epfd: c_int,
+//     pub op: c_int,
+//     pub fd: c_int,
+//     pub event: epoll_event,
+// }
+
+// unsafe impl PassthroughAlloc for EpollCtl {
+//     const NUM: c_long = SYS_epoll_ctl;
+//     type Argv = Argv<4>;
+//     type Ret = ();
+
+//     fn stage(self) -> Self::Argv {
+//         // Cast the pointer to the event to a usize so it fits into the syscall argument array.
+//         Argv([
+//             self.epfd as usize,
+//             self.op as usize,
+//             self.fd as usize,
+//             self.event as usize,
+//         ])
+//     }
+// }
+
 pub struct Eventfd2 {
     pub initval: c_int,
     pub flags: c_int,
@@ -175,6 +198,23 @@ unsafe impl PassthroughAlloc for Eventfd2 {
         Argv([self.initval as _, self.flags as _])
     }
 }
+
+pub struct Pipe2 {
+    pub pipefd: *mut c_int,
+    pub flags: c_int,
+}
+
+unsafe impl PassthroughAlloc for Pipe2 {
+    const NUM: c_long = SYS_pipe2;
+
+    type Argv = Argv<3>;
+    type Ret = c_int;
+
+    fn stage(self) -> Self::Argv {
+        Argv([self.pipefd.wrapping_add(0) as _, self.pipefd.wrapping_add(1) as _, self.flags as _])
+    }
+}
+
 
 pub struct Exit {
     pub status: c_int,

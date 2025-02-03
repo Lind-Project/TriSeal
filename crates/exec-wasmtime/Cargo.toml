@@ -15,7 +15,6 @@ dbg = ["rustls/logging"]
 anyhow = { workspace = true }
 cap-std = { workspace = true }
 const-oid = { workspace = true }
-drawbridge-client = { workspace = true }
 enarx-config = { workspace = true }
 getrandom = { workspace = true }
 io-lifetimes = { workspace = true }

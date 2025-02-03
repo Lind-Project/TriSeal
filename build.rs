@@ -46,6 +46,7 @@ fn host_has_sgx2() -> bool {
 }
 
 fn main() {
+    println!("cargo:rustc-cfg=mio_unsupported_force_waker_pipe");
     println!("cargo:rerun-if-env-changed=OUT_DIR");
 
     // Enarx compilation target architecture and OS.
@@ -67,6 +68,7 @@ fn main() {
             const AESM_SOCKET: &str = "/var/run/aesmd/aesm.socket";
 
             println!("cargo:rustc-cfg=host_can_test_sgx");
+            println!("cargo:rustc-cfg=mio_unsupported_force_waker_pipe");
 
             if (!cfg!(feature = "disable-sgx-attestation"))
                 && Path::new(AESM_SOCKET).exists()

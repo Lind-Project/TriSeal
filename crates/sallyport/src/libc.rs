@@ -71,6 +71,7 @@ pub struct pollfd {
     pub revents: c_short,
 }
 
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct sigset_t {
@@ -303,6 +304,7 @@ pub const SYS_munmap: c_long = 11;
 pub const SYS_nanosleep: c_long = 35;
 pub const SYS_open: c_long = 2;
 pub const SYS_poll: c_long = 7;
+pub const SYS_pipe2: c_long = 293;
 pub const SYS_read: c_long = 0;
 pub const SYS_readlink: c_long = 89;
 pub const SYS_readv: c_long = 19;

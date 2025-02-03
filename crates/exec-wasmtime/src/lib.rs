@@ -13,7 +13,7 @@ mod workload;
 
 #[cfg(unix)]
 pub use log::Level as LogLevel;
-pub use workload::{Package, Workload, PACKAGE_CONFIG, PACKAGE_ENTRYPOINT};
+pub use workload::{Package, Workload};
 
 use runtime::Runtime;
 

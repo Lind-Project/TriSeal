@@ -12,7 +12,6 @@ use std::sync::Arc;
 use std::thread;
 
 use anyhow::{ensure, Context};
-use drawbridge_client::Url;
 use process_control::Output;
 use rustls::client::{ServerCertVerified, ServerCertVerifier};
 use rustls::version::TLS13;

@@ -1,5 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
+macro_rules! debug {
+    ($dst:expr, $($arg:tt)*) => {
+        #[allow(unused_must_use)] {
+            if $crate::DEBUG {
+                use core::fmt::Write;
+                write!($dst, $($arg)*);
+            }
+        }
+    };
+}
+
 use super::alloc::{Alloc, Allocator, Collect, Commit, Committer};
 use super::call::kind;
 use super::syscall::types::{MremapFlags, SockaddrInput, SockaddrOutput, SockoptInput};
@@ -13,7 +24,7 @@ use crate::libc::{
     SYS_dup3, SYS_epoll_create1, SYS_epoll_ctl, SYS_epoll_pwait, SYS_epoll_wait, SYS_eventfd2,
     SYS_exit, SYS_exit_group, SYS_fcntl, SYS_fstat, SYS_futex, SYS_getegid, SYS_geteuid,
     SYS_getgid, SYS_getpid, SYS_getrandom, SYS_getsockname, SYS_getuid, SYS_ioctl, SYS_listen,
-    SYS_madvise, SYS_mmap, SYS_mprotect, SYS_mremap, SYS_munmap, SYS_nanosleep, SYS_open, SYS_poll,
+    SYS_madvise, SYS_mmap, SYS_mprotect, SYS_mremap, SYS_munmap, SYS_nanosleep, SYS_open, SYS_pipe2, SYS_poll,
     SYS_read, SYS_readlink, SYS_readv, SYS_recvfrom, SYS_rt_sigaction, SYS_rt_sigprocmask,
     SYS_sendto, SYS_set_tid_address, SYS_setsockopt, SYS_sigaltstack, SYS_socket, SYS_sync,
     SYS_uname, SYS_write, SYS_writev, CLOCK_MONOTONIC, EFAULT, EINVAL, ENOSYS, ENOTSUP, FIONBIO,
@@ -502,6 +513,13 @@ pub trait Handler {
         })?
     }
 
+    /// Executes the pipe2 syscall.
+    #[inline]
+    fn pipe2(&mut self, pipefd: *mut c_int, flags: c_int) -> Result<c_int> {
+        // The return value is expected to be 0 on success.
+        self.execute(syscall::Pipe2 { pipefd, flags })?
+    }
+
     /// Executes [`poll`](https://man7.org/linux/man-pages/man2/poll.2.html) syscall akin to [`libc::poll`].
     #[inline]
     fn poll(&mut self, fds: &mut [pollfd], timeout: c_int) -> Result<c_int> {
@@ -682,6 +700,7 @@ pub trait Handler {
     /// Executes [`write`](https://man7.org/linux/man-pages/man2/write.2.html) syscall akin to [`libc::write`].
     #[inline]
     fn write(&mut self, fd: c_int, buf: &[u8]) -> Result<c_size_t> {
+        //let buf = b"heyya";
         self.execute(syscall::Write { fd, buf })?
             .unwrap_or_else(|| self.attacked())
     }
@@ -939,6 +958,10 @@ pub trait Handler {
                 let mode = if mode == 0 { None } else { Some(mode as _) };
                 self.open(pathname, flags as _, mode)
                     .map(|ret| [ret as _, 0])
+            }
+            (SYS_pipe2, [pipefd, flags, ..]) => {
+                let pipefd = platform.validate_mut(pipefd)?;
+                self.pipe2(pipefd, flags as _).map(|ret| [ret as _, 0])
             }
             (SYS_poll, [fds, nfds, timeout, ..]) => {
                 let fds = platform.validate_slice_mut(fds, nfds)?;
