@@ -2,3 +2,4 @@ target/
 output/
 .idea/
 .vscode/
+*.lock

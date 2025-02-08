@@ -3,7 +3,17 @@ rustflags = [
     "-C", "linker=gcc",
     "--cfg", "polyval_force_soft",
     "--cfg", "aes_force_soft",
+    "--cfg", "mio_unsupported_force_poll_poll",
 ]
+
+[target.x86_64-unknown-linux-musl]
+rustflags = [
+    "-C", "linker=musl-gcc",
+    "--cfg", "polyval_force_soft",
+    "--cfg", "aes_force_soft",
+    "--cfg", "mio_unsupported_force_poll_poll",
+]
+
 
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "target-feature=+crt-static"]

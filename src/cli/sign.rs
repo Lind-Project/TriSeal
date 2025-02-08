@@ -43,14 +43,6 @@ pub struct Options {
     #[clap(long)]
     sgx_key: Utf8PathBuf,
 
-    /// SEV P-384 private key in PEM form
-    #[clap(long)]
-    sev_id_key_signature: Utf8PathBuf,
-
-    /// SEV P-384 private key in PEM form
-    #[clap(long)]
-    sev_id_key: Utf8PathBuf,
-
     /// File path to write the signature
     #[clap(long)]
     out: Option<Utf8PathBuf>,
@@ -120,23 +112,8 @@ impl Options {
         Ok(sgx_key)
     }
 
-    fn load_sev_key(&self) -> Result<(SigningKey, Vec<u8>)> {
-        let mut sev_key_file =
-            File::open(&self.sev_id_key).context("Failed to open SEV private key file")?;
-        let mut buffer = String::new();
-        sev_key_file.read_to_string(&mut buffer)?;
-        let sev_key =
-            SigningKey::from_pkcs8_pem(&buffer).context("Failed to import SEV private key")?;
-
-        let mut sev_id_key_signature_file = File::open(&self.sev_id_key_signature)
-            .context("Failed to open SEV id key signature")?;
-        let mut sev_id_key_signature = vec![];
-        sev_id_key_signature_file.read_to_end(&mut sev_id_key_signature)?;
-
-        Ok((sev_key, sev_id_key_signature))
-    }
-
     pub fn execute(self) -> anyhow::Result<ExitCode> {
+        println!("Signing the binary with the given keys");
         use mmarinus::{perms, Map, Private};
         let binary = if let Some(ref path) = self.binpath {
             Some(Map::load(path, Private, perms::Read)?)
@@ -169,13 +146,9 @@ impl Options {
 
             match backend.name() {
                 "sgx" => {
+                    println!("Signing with SGX key");
                     let signature = sign_sgx(&blob, &self.load_sgx_key()?)?;
                     signatures.sgx = signature;
-                }
-                "sev" => {
-                    let (id_key, id_key_signature) = self.load_sev_key()?;
-                    let signature = sign_sev(&blob, &id_key, &id_key_signature)?;
-                    signatures.sev = signature;
                 }
                 _ => {
                     continue;

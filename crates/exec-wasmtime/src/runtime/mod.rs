@@ -17,8 +17,9 @@ use enarx_config::{Config, File};
 use wasi_common::snapshots::preview_1::types::Rights;
 use wasi_common::WasiFile;
 use wasmtime::{AsContextMut, Engine, Linker, Module, Store, Val};
-use wasmtime_wasi::{Stderr, Stdin, Stdout, StdoutStream, StdinStream};
+use wasmtime_wasi::{Stderr, Stdin, Stdout, StdoutStream, StdinStream, DirPerms, FilePerms};
 use wasmtime_wasi::WasiCtxBuilder;
+use std::fs;
 use wasmtime_wasi::preview1::{add_to_linker_sync, WasiP1Ctx};
 use wiggle::tracing::{instrument, trace_span};
 
@@ -50,9 +51,12 @@ impl Runtime {
         .collect::<Vec<_>>();
 
         let mut config = wasmtime::Config::new();
-        config.wasm_reference_types(true);       // Enable reference types
-        config.wasm_function_references(true);   // Enable function references
-        config.wasm_gc(true);                    // Enable garbage collection
+        // config.wasm_reference_types(true);       // Enable reference types
+        // config.wasm_function_references(true);   // Enable function references
+        // config.wasm_gc(true);                    // Enable garbage collection
+        config.wasm_backtrace(true);
+        config.native_unwind_info(true);                // Enable threads
+        config.debug_info(true);                        // Enable debug info
         config.memory_init_cow(false);
         config.async_support(false);
 
@@ -65,15 +69,18 @@ impl Runtime {
             .in_scope(|| add_to_linker_sync(&mut linker, |s| s))
             .context("failed to setup linker and link WASI")?;
 
-        let builder = WasiCtxBuilder::new()
-        .inherit_stdio()
-        .inherit_stdin()
-        .inherit_stderr()
-        .args(&["main.wasm", "/home/lind/enarx/test.txt", "/home/lind/enarx/src/test.txt"])
-        .build_p1();
+        let mut builder = WasiCtxBuilder::new();
+        builder.inherit_stdio();
+        builder.inherit_stdin();
+        builder.inherit_stderr();
+        // builder.args(&["main.wasm", "/etc/resolv.conf", "/etc/resolv.conf"]);
+        builder.preopened_dir("/home/lind/enarx", ".", DirPerms::all(), FilePerms::all()).expect("failed to open current directory");
+       // builder.preopened_dir("/tmp", "/tmp", DirPerms::all(), FilePerms::all()).expect("failed to open current directory");
+
+        //fs::File::open("/home/lind/enarx/test.txt").map_err(|err| format!("error opening input fuckup /home/lind/enarx/test.txt: {}", err)).unwrap();
 
         let mut wstore = trace_span!("initialize Wasmtime store")
-            .in_scope(|| Store::new(&engine, builder));
+            .in_scope(|| Store::new(&engine, builder.build_p1()));
 
         let module = trace_span!("compile Wasm")
             .in_scope(|| Module::from_binary(&engine, &webasm))

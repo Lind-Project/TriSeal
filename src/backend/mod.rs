@@ -75,7 +75,7 @@ impl Signatures {
         match path {
             None => {
                 // If no path is specified, try to load the system-wide signatures.
-                let path = PathBuf::from("/usr/lib/enarx/enarx.sig");
+                let path = PathBuf::from("./enarx-sig.sig");
                 if path.exists() {
                     Self::load_and_check_file(&path).with_context(|| {
                         format!(
