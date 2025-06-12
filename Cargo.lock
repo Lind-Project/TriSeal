@@ -4432,15 +4432,33 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-wasi"
-version = "5.0.1"
+version = "23.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2aa31e718a1f7294fc44a9eef13abf6ef32fd0574d9d7b365fee9ca24730a822"
+checksum = "1657059a9a05fdfd3f4211d20532bed36cf1e972f3f6876fb24fef90c713602e"
 dependencies = [
  "anyhow",
- "wasi-cap-std-sync",
- "wasi-common",
+ "async-trait",
+ "bitflags 2.8.0",
+ "bytes",
+ "cap-fs-ext",
+ "cap-net-ext",
+ "cap-rand",
+ "cap-std",
+ "cap-time-ext",
+ "fs-set-times",
+ "futures",
+ "io-extras 0.18.4",
+ "io-lifetimes 2.0.4",
+ "once_cell",
+ "rustix 0.38.44",
+ "system-interface",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "url",
  "wasmtime",
  "wiggle",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
