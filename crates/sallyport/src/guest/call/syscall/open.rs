@@ -21,12 +21,7 @@ impl<'a> MaybeAlloc<'a, kind::Syscall> for Open<'a> {
 
     #[inline]
     fn stage(self) -> Result<UnstagedMaybeAlloc<'a, kind::Syscall, Self::Alloc>> {
-        match self.pathname {
-            b"/etc/resolv.conf\0" if self.flags & !(O_RDONLY | O_CLOEXEC) == 0 => {
-                Ok(UnstagedMaybeAlloc::Alloc(AllocOpen(self)))
-            }
-            _ => Ok(UnstagedMaybeAlloc::Stub(Err(EACCES))),
-        }
+        Ok(UnstagedMaybeAlloc::Alloc(AllocOpen(self)))
     }
 }
 

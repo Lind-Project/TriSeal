@@ -3,11 +3,11 @@
 //! The Enarx Wasm runtime and all related functionality
 
 mod identity;
-mod io;
+// mod io;
 //mod net;
 
-use self::io::null::Null;
-use self::io::stdio_file;
+// use self::io::null::Null;
+// use self::io::stdio_file;
 //use self::net::{connect_file, listen_file};
 
 use super::{Package, Workload};
@@ -20,10 +20,12 @@ use wasmtime::{AsContextMut, Engine, Linker, Module, Store, Val};
 use wasmtime_wasi::{Stderr, Stdin, Stdout, StdoutStream, StdinStream, DirPerms, FilePerms};
 use wasmtime_wasi::WasiCtxBuilder;
 use std::fs;
+use std::io::{self, BufReader, Read};
 use wasmtime_wasi::preview1::{add_to_linker_sync, WasiP1Ctx};
 use wiggle::tracing::{instrument, trace_span};
 
 // The Enarx Wasm runtime
+
 pub struct Runtime;
 
 impl Runtime {
@@ -50,15 +52,29 @@ impl Runtime {
         .map(rustls::Certificate)
         .collect::<Vec<_>>();
 
+        // let file = fs::File::open("/home/lind/enarx/test.txt").map_err(|err| format!("error opening input fuckup /home/lind/enarx/test.txt: {}", err)).unwrap();
+        // //panic!("{:?}", file);
+        // println!(" runtime {:?}", file);
+        // let mut reader = BufReader::new(file);
+        // println!("runtime {:?}", reader);
+        // let mut contents = String::new();
+        // reader.read_to_string(&mut contents)?;
+        // println!("runtime {:?}", contents);
+        // print!("runtime  {}", contents);
+
         let mut config = wasmtime::Config::new();
         // config.wasm_reference_types(true);       // Enable reference types
         // config.wasm_function_references(true);   // Enable function references
         // config.wasm_gc(true);                    // Enable garbage collection
         config.wasm_backtrace(true);
         config.native_unwind_info(true);                // Enable threads
-        config.debug_info(true);                        // Enable debug info
+        config.debug_info(false);                        // Enable debug info
         config.memory_init_cow(false);
         config.async_support(false);
+        config.wasm_threads(true);
+        config.wasm_simd(true);
+        
+
 
         let engine = trace_span!("initialize Wasmtime engine")
             .in_scope(|| Engine::new(&config))
@@ -69,11 +85,12 @@ impl Runtime {
             .in_scope(|| add_to_linker_sync(&mut linker, |s| s))
             .context("failed to setup linker and link WASI")?;
 
+
         let mut builder = WasiCtxBuilder::new();
         builder.inherit_stdio();
         builder.inherit_stdin();
         builder.inherit_stderr();
-        // builder.args(&["main.wasm", "/etc/resolv.conf", "/etc/resolv.conf"]);
+        builder.args(&["cat.cwasm", "test.txt"]);
         builder.preopened_dir("/home/lind/enarx", ".", DirPerms::all(), FilePerms::all()).expect("failed to open current directory");
        // builder.preopened_dir("/tmp", "/tmp", DirPerms::all(), FilePerms::all()).expect("failed to open current directory");
 
@@ -83,11 +100,15 @@ impl Runtime {
             .in_scope(|| Store::new(&engine, builder.build_p1()));
 
         let module = trace_span!("compile Wasm")
-            .in_scope(|| Module::from_binary(&engine, &webasm))
+            .in_scope(|| unsafe { Module::deserialize(&engine, &webasm) })
             .context("failed to compile Wasm module")?;
         trace_span!("link Wasm")
             .in_scope(|| linker.module(&mut wstore, "", &module))
             .context("failed to link module")?;
+
+        //let main_wasm = fs::read("/home/lind/enarx/printf.cwasm")?;
+        // let main_module = Module::new(&engine, &webasm)?;
+        // let main_instance = linker.instantiate(&mut wstore, &main_module)?;
 
         let mut ctx = wstore.as_context_mut();
         let ctx = ctx.data_mut();

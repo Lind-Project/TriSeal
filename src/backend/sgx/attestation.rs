@@ -124,7 +124,10 @@ impl From<u32> for AesmError {
             26 => PlatformInfoBlobInvalidSig,
             27 => ServiceNotAvailable,
             28 => KdfMismatch,
-            29 => OutOfEpc,
+            29 => {
+                println!("Out of EPC");
+                OutOfEpc
+            },
             30 => ServiceUnavailable,
             31 => UnrecognizedPlatform,
             32 => EcdsaIdMismatch,
