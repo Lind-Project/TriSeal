@@ -74,7 +74,7 @@ impl Runtime {
         builder.inherit_stdin();
         builder.inherit_stderr();
         // builder.args(&["main.wasm", "/etc/resolv.conf", "/etc/resolv.conf"]);
-        builder.preopened_dir("/home/lind/enarx", ".", DirPerms::all(), FilePerms::all()).expect("failed to open current directory");
+        builder.preopened_dir("/home", ".", DirPerms::all(), FilePerms::all()).expect("failed to open current directory");
        // builder.preopened_dir("/tmp", "/tmp", DirPerms::all(), FilePerms::all()).expect("failed to open current directory");
 
         //fs::File::open("/home/lind/enarx/test.txt").map_err(|err| format!("error opening input fuckup /home/lind/enarx/test.txt: {}", err)).unwrap();
