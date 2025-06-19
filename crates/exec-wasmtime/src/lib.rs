@@ -10,6 +10,7 @@
 mod log;
 mod runtime;
 mod workload;
+mod lind;
 
 #[cfg(unix)]
 pub use log::Level as LogLevel;
