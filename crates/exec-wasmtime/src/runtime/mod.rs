@@ -7,40 +7,27 @@ mod io;
 //mod net;
 
 use self::io::null::Null;
-// use self::io::stdio_file;
-//use self::net::{connect_file, listen_file};
 
 use super::{Package, Workload};
 
+use std::sync::{Arc, atomic::AtomicU64};
+use cap_std::fs::Dir;
+use anyhow::{anyhow, Result, bail, Context};
+use enarx_config::{Config, File};
+use wasmtime::{AsContextMut, Engine, Linker, Module, Store, Val, Func, InstantiateType, StoreLimits, ValType};
+use wasi_common::sync::WasiCtxBuilder;
+use wasmtime_wasi_threads::WasiThreadsCtx;
 use wasmtime_lind_common::LindCommonCtx;
 use wasmtime_lind_multi_process::{LindCtx, LindHost, CAGE_START_ID, THREAD_START_ID};
-use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
-use wasmtime_lind_utils::LindCageManager;
+use wasmtime_lind_utils::{lind_syscall_numbers::EXIT_SYSCALL, LindCageManager};
 use rawposix::safeposix::dispatcher::lind_syscall_api;
-use std::sync::Arc;
-use cap_std::fs::Dir;
-use wasmtime_wasi_threads::WasiThreadsCtx;
-use std::sync::atomic::AtomicU64;
-use anyhow::{anyhow, Result, bail};
-use wasmtime::{
-    Func, InstantiateType, StoreLimits, ValType,
-};
-
-use anyhow::Context;
-use enarx_config::{Config, File};
-// use wasi_common::snapshots::preview_1::types::Rights;
-// use wasi_common::WasiFile;
-use wasmtime::{AsContextMut, Engine, Linker, Module, Store, Val};
-// use wasmtime_wasi::{Stderr, Stdin, Stdout, StdoutStream, StdinStream, DirPerms, FilePerms};
-// use wasmtime_wasi::WasiCtxBuilder;
-use wasi_common::sync::WasiCtxBuilder;
-// use std::fs;
-// use wasmtime_wasi::preview1::{add_to_linker_sync, WasiP1Ctx};
-// use wasmtime_wasi::{add_to_linker, WasiCtxBuilder};
-// use wiggle::tracing::{instrument, trace_span};
 use wiggle::tracing::trace_span;
 
-// Declare the context 
+/// The MyCtx host structure stores all relevant execution context objects
+/// `preview1_ctx`: the WASI preview1 context (used by glibc and POSIX emulation);
+/// `lind_common_ctx`: the context responsible for per-cage state management (e.g., signal handling, cage ID tracking);
+/// `lind_fork_ctx`: the multi-process management structure, encapsulating fork/exec state;
+/// `wasi_threads`: which manages WASI thread-related capabilities.
 #[derive(Default, Clone)]
 struct MyCtx {
     preview1_ctx: Option<wasi_common::WasiCtx>,
@@ -49,6 +36,8 @@ struct MyCtx {
     lind_fork_ctx: Option<LindCtx<MyCtx, Option<enarx_config::Config>>>,
 }
 
+/// This implementation allows MyCtx to be used where a mutable reference to `wasi_common::WasiCtx` 
+/// is expected.
 impl AsMut<wasi_common::WasiCtx> for MyCtx {
     fn as_mut(&mut self) -> &mut wasi_common::WasiCtx {
         self.preview1_ctx
@@ -58,6 +47,10 @@ impl AsMut<wasi_common::WasiCtx> for MyCtx {
 }
 
 impl MyCtx {
+    /// Performs a partial deep clone of the host context. It explicitly forks the WASI preview1 
+    /// context(`preview1_ctx`), the lind multi-process context (`lind_fork_ctx`), and the lind common 
+    /// context (`lind_common_ctx`). Other parts of the context, such as `wasi_threads`, are shared 
+    /// between forks since they are not required to be process-isolated.
     pub fn fork(&self) -> Self {
         // we want to do a real fork for wasi_preview1 context since glibc uses the environment variable
         // related interface here
@@ -103,7 +96,11 @@ pub struct Runtime;
 
 impl Runtime {
     // Execute an Enarx [Package]
-    // #[instrument]
+    /// This function runs the first Wasm module in an Enarx Keep. It parses the Enarx package, 
+    /// generates or attests an identity, sets up the Wasmtime engine, creates the initial store 
+    /// and linker, and injects various contexts (WASI, lind-common, lind-multi-process). The 
+    /// module is instantiated, and the main function is executed via load_main_module. This 
+    /// function is the primary entry point for initial Wasm execution.
     pub fn execute(package: Package) -> anyhow::Result<Vec<Val>> {
         let (prvkey, crtreq) =
             identity::generate().context("failed to generate a private key and CSR")?;
@@ -129,24 +126,13 @@ impl Runtime {
         .collect::<Vec<_>>();
 
         let mut config = wasmtime::Config::new();
-        // config.wasm_reference_types(true);       // Enable reference types
-        // config.wasm_function_references(true);   // Enable function references
-        // config.wasm_gc(true);                    // Enable garbage collection
-        config.wasm_backtrace(true);
-        config.native_unwind_info(true);                // Enable threads
-        config.debug_info(true);                        // Enable debug info
-        config.memory_init_cow(false);
-        // config.async_support(false);
 
         let engine = trace_span!("initialize Wasmtime engine")
             .in_scope(|| Engine::new(&config))
             .context("failed to create execution engine")?;
 
-        // let wasi = builder.build();
         let Host = MyCtx::default();
 
-        // let mut wstore = trace_span!("initialize Wasmtime store")
-        //     .in_scope(|| Store::new(&engine, builder.build_p1()));
         let mut wstore = trace_span!("initialize Wasmtime store")
             .in_scope(|| Store::new(&engine, Host));
 
@@ -175,7 +161,7 @@ impl Runtime {
         builder.inherit_stdio().args(&full_args);
         builder.inherit_stdin();
         builder.inherit_stderr();
-        // builder.preopened_dir("/home", ".", DirPerms::all(), FilePerms::all()).expect("failed to open current directory");
+        
         let dir = Dir::open_ambient_dir("/home", cap_std::ambient_authority()).expect("failed to open /home");
         builder.preopened_dir(dir, ".").expect("failed to open current directory");
         wstore.data_mut().preview1_ctx = Some(builder.build());
@@ -200,7 +186,6 @@ impl Runtime {
                 module.clone(),
                 linker.clone(),
                 lind_manager.clone(),
-                // self.clone(),
                 webasm.clone(),
                 enarx_conf.clone(),
                 shared_next_cageid.clone(),
@@ -285,7 +270,11 @@ impl Runtime {
         result
     }
 
-    // This will only be called by exec_syscall()
+    /// This function is called when a new Wasm module is executed via an exec() syscall inside 
+    /// a Wasm process. It mirrors much of the behavior of execute, but instead of reading 
+    /// configuration from Enarx.toml, it uses an updated or synthetic config passed in at runtime. 
+    /// This config has its args explicitly overridden. A new MyCtx is created, associated with 
+    /// a new PID, and the module is launched in its own cage. 
     pub fn execute_with_lind(
         // Wasm module
         webasm: Vec<u8>,
@@ -295,9 +284,6 @@ impl Runtime {
         pid: u64,
         next_cageid: Arc<AtomicU64>,
     ) -> Result<Vec<Val>> {
-
-        println!("Executing with Lind: pid: {}", pid);
-
         let enarx_conf = config;
         let Config {
             steward,
@@ -307,24 +293,13 @@ impl Runtime {
         } = enarx_conf.clone().unwrap_or_default();
 
         let mut config = wasmtime::Config::new();
-        // config.wasm_reference_types(true);       // Enable reference types
-        // config.wasm_function_references(true);   // Enable function references
-        // config.wasm_gc(true);                    // Enable garbage collection
-        config.wasm_backtrace(true);
-        config.native_unwind_info(true);                // Enable threads
-        config.debug_info(true);                        // Enable debug info
-        config.memory_init_cow(false);
-        // config.async_support(false);
 
         let engine = trace_span!("initialize Wasmtime engine")
             .in_scope(|| Engine::new(&config))
             .context("failed to create execution engine")?;
 
-        // let wasi = builder.build();
         let Host = MyCtx::default();
 
-        // let mut wstore = trace_span!("initialize Wasmtime store")
-        //     .in_scope(|| Store::new(&engine, builder.build_p1()));
         let mut wstore = trace_span!("initialize Wasmtime store")
             .in_scope(|| Store::new(&engine, Host));
 
@@ -349,7 +324,7 @@ impl Runtime {
         builder.inherit_stdio().args(&full_args);
         builder.inherit_stdin();
         builder.inherit_stderr();
-        // builder.preopened_dir("/home", ".", DirPerms::all(), FilePerms::all()).expect("failed to open current directory");
+
         let dir = Dir::open_ambient_dir("/home", cap_std::ambient_authority()).expect("failed to open /home");
         builder.preopened_dir(dir, ".").expect("failed to open current directory");
         wstore.data_mut().preview1_ctx = Some(builder.build());
@@ -378,7 +353,6 @@ impl Runtime {
                 module.clone(),
                 linker.clone(),
                 lind_manager.clone(),
-                // self.clone(),
                 webasm.clone(),
                 enarx_conf.clone(),
                 pid as i32,
@@ -436,6 +410,9 @@ impl Runtime {
         result
     }
 
+    /// This function takes a compiled module, instantiates it with the current store and linker, 
+    /// and executes its entry point. This is the point where the Wasm "process" actually starts 
+    /// executing.
     fn load_main_module(
         store: &mut Store<MyCtx>,
         linker: &mut Linker<MyCtx>,
@@ -497,6 +474,8 @@ impl Runtime {
         result
     }
 
+    /// This function takes a Wasm function (Func) and a list of string arguments, parses the 
+    /// arguments into Wasm values based on expected types (ValType), and invokes the function
     fn invoke_func(store: &mut Store<MyCtx>, func: Func, args: &[String]) -> Result<Vec<Val>> {
         let ty = func.ty(&store);
         if ty.params().len() > 0 {
@@ -505,7 +484,6 @@ impl Runtime {
                  is experimental and may break in the future"
             );
         }
-        // let mut args = self.module_and_args.iter().skip(1);
         let mut args = args.iter();
         let mut values = Vec::new();
         for ty in ty.params() {
