@@ -240,28 +240,17 @@ impl Runtime {
                     code = *res;
                 }
                 // exit the thread
-                // if rawposix::interface::lind_thread_exit(
-                //     CAGE_START_ID as u64,
-                //     THREAD_START_ID as u64,
-                // ) {
-                //     // we clean the cage only if this is the last thread in the cage
-                //     // exit the cage with the exit code
-                //     lind_syscall_api(1, EXIT_SYSCALL as u32, 0, code as u64, 0, 0, 0, 0, 0);
+                if rawposix::interface::lind_thread_exit(
+                    CAGE_START_ID as u64,
+                    THREAD_START_ID as u64,
+                ) {
+                    // we clean the cage only if this is the last thread in the cage
+                    // exit the cage with the exit code
+                    lind_syscall_api(1, EXIT_SYSCALL as u32, 0, code as u64, 0, 0, 0, 0, 0);
 
-                //     // main cage exits
-                //     lind_manager.decrement();
-                // }
-                // we clean the cage only if this is the last thread in the cage
-                // exit the cage with the exit code
-                lind_syscall_api(1, EXIT_SYSCALL as u32, 0, code as u64, 0, 0, 0, 0, 0);
-
-                // main cage exits
-                lind_manager.decrement();
-
-                // we wait until all other cage exits
-                lind_manager.wait();
-                // after all cage exits, finalize the lind
-                rawposix::safeposix::dispatcher::lindrustfinalize();
+                    // main cage exits
+                    lind_manager.decrement();
+                }
             }
             Err(e) => {
                 // Exit the process if Wasmtime understands the error;
@@ -353,26 +342,6 @@ impl Runtime {
 
         // attach Lind-Multi-Process-Context to the host
         {
-            wstore.data_mut().lind_fork_ctx = Some(LindCtx::new(
-                module.clone(),
-                linker.clone(),
-                lind_manager.clone(),
-                // self.clone(),
-                webasm.clone(),
-                enarx_conf.clone(),
-                shared_next_cageid.clone(),
-                |host| host.lind_fork_ctx.as_mut().unwrap(),
-                |host| host.fork(),
-                |webasm, enarx_conf, path, args, pid, next_cageid, lind_manager, envs| {
-                    Runtime::execute_with_lind(
-                        webasm.clone(),
-                        enarx_conf.clone(),
-                        lind_manager.clone(),
-                        pid as u64,
-                        next_cageid.clone(),
-                    )
-                },
-            )?);
             wstore.data_mut().lind_fork_ctx = Some(LindCtx::new_with_pid(
                 module.clone(),
                 linker.clone(),
@@ -454,24 +423,24 @@ impl Runtime {
         store.as_context_mut().set_stack_top(stack_low as u64);
 
         // retrieve the epoch global
-        // let lind_epoch = instance
-        //     .get_export(&mut *store, "epoch")
-        //     .and_then(|export| export.into_global())
-        //     .expect("Failed to find epoch global export!");
+        let lind_epoch = instance
+            .get_export(&mut *store, "epoch")
+            .and_then(|export| export.into_global())
+            .expect("Failed to find epoch global export!");
 
-        // // retrieve the handler (underlying pointer) for the epoch global
-        // let pointer = lind_epoch.get_handler(&mut *store);
+        // retrieve the handler (underlying pointer) for the epoch global
+        let pointer = lind_epoch.get_handler(&mut *store);
 
-        // // initialize the signal for the main thread of the cage
-        // rawposix::interface::lind_signal_init(
-        //     pid,
-        //     pointer as *mut u64,
-        //     THREAD_START_ID,
-        //     true, /* this is the main thread */
-        // );
+        // initialize the signal for the main thread of the cage
+        rawposix::interface::lind_signal_init(
+            pid,
+            pointer as *mut u64,
+            THREAD_START_ID,
+            true, /* this is the main thread */
+        );
 
-        // // see comments at signal_may_trigger for more details
-        // rawposix::interface::signal_may_trigger(pid);
+        // see comments at signal_may_trigger for more details
+        rawposix::interface::signal_may_trigger(pid);
 
         let result = match func {
             Some(func) => Runtime::invoke_func(store, func, &args),
