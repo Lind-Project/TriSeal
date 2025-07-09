@@ -229,10 +229,15 @@ zeroize = { version = "1.5.4", features = ["alloc"], default-features = false }
 
 # wasmtime and its pinned dependencies
 # these will need to be updated together
-wasmtime = { version = "23.0.0", features = ["cranelift", "pooling-allocator", "gc", "threads"], default-features = false }
+wasmtime = { path = "../lind-wasm/src/wasmtime/crates/wasmtime", features = ["cranelift", "pooling-allocator", "gc", "threads"], default-features = false }
+wasmtime-lind-common = { path = "../lind-wasm/src/wasmtime/crates/lind-common" }
+wasmtime-lind-multi-process = { path = "../lind-wasm/src/wasmtime/crates/lind-multi-process" }
+wasmtime-lind-utils = { path = "../lind-wasm/src/wasmtime/crates/lind-utils" }
+wasmtime-wasi-threads = { path = "../lind-wasm/src/wasmtime/crates/wasi-threads" }
+rawposix = { path = "../lind-wasm/src/wasmtime/crates/rawposix" }
 cap-std = { version = "3.4.2", default-features = false }
 io-lifetimes = { version = "2.0.4", default-features = false }
 rustix = { version = "0.38.44", features = ["std"], default-features = false }
-wasi-common = { version = "23.0.0", features = ["sync"] ,default-features = false }
+wasi-common = { path = "../lind-wasm/src/wasmtime/crates/wasi-common", features = ["sync"] ,default-features = false }
 wasmtime-wasi = { version = "23.0.0", features = ["preview1"] , default-features = false }
 wiggle = { version = "23.0.0", default-features = false }
