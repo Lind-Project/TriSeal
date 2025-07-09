@@ -166,7 +166,13 @@ impl Runtime {
             .in_scope(|| wasi_common::sync::add_to_linker(&mut linker, |s: &mut MyCtx| AsMut::<wasi_common::WasiCtx>::as_mut(s)))
             .context("failed to setup linker and link WASI")?;
         let mut builder = WasiCtxBuilder::new();
-        builder.inherit_stdio();
+        // In WASI, the argv semantics follow the POSIX convention: argv[0] is expected to be the program name, and argv[1..] 
+        // are the actual arguments. However, in Enarx, we don’t have access to the original program name since the Wasm 
+        // binary is typically loaded from a file descriptor rather than a path. As a result, we insert a placeholder 
+        // value as argv[0] when constructing the argument list.
+        let mut full_args = vec!["main.wasm".to_string()];
+        full_args.extend(args.clone());
+        builder.inherit_stdio().args(&full_args);
         builder.inherit_stdin();
         builder.inherit_stderr();
         // builder.preopened_dir("/home", ".", DirPerms::all(), FilePerms::all()).expect("failed to open current directory");
@@ -201,9 +207,25 @@ impl Runtime {
                 |host| host.lind_fork_ctx.as_mut().unwrap(),
                 |host| host.fork(),
                 |webasm, enarx_conf, path, args, pid, next_cageid, lind_manager, envs| {
+                    // This closure is invoked during exec from `lind-multi-process::LindCtx::execve_call` in the lind-wasm. 
+                    // At that point, `args` has already been populated based on the inputs to `execv()`.
+                    // In the current design of lind-wasm-enarx, the arguments field from Enarx.toml is only applied to the 
+                    // initial wasm module, and is not used for subsequent exec calls. Therefore, we explicitly override the 
+                    // `args` field inside `enarx_conf` here.
+                    // Since the wasm binary is selected via the argument passed to `exec()`, we skip the first element of 
+                    // `args` (which represents the binary name).
+                    // Additionally, when Enarx.toml is not provided, `enarx_conf` will be `None`, so we insert a default 
+                    // `enarx_config::Config` object as needed before updating its `args` field.
+                    let mut new_enarx_conf = enarx_conf.clone();
+                    let conf = new_enarx_conf.get_or_insert_with(|| Config {
+                        args: vec![],  
+                        ..Default::default()
+                    });
+                    conf.args = args.get(1..).map_or(vec![], |s| s.to_vec());
+
                     Runtime::execute_with_lind(
                         webasm.clone(),
-                        enarx_conf.clone(),
+                        Some(conf.clone()),
                         lind_manager.clone(),
                         pid as u64,
                         next_cageid.clone(),
@@ -263,6 +285,7 @@ impl Runtime {
         result
     }
 
+    // This will only be called by exec_syscall()
     pub fn execute_with_lind(
         // Wasm module
         webasm: Vec<u8>,
@@ -317,7 +340,13 @@ impl Runtime {
             .in_scope(|| wasi_common::sync::add_to_linker(&mut linker, |s: &mut MyCtx| AsMut::<wasi_common::WasiCtx>::as_mut(s)))
             .context("failed to setup linker and link WASI")?;
         let mut builder = WasiCtxBuilder::new();
-        builder.inherit_stdio();
+        // In WASI, the argv semantics follow the POSIX convention: argv[0] is expected to be the program name, and argv[1..] 
+        // are the actual arguments. However, in Enarx, we don’t have access to the original program name since the Wasm 
+        // binary is typically loaded from a file descriptor rather than a path. As a result, we insert a placeholder 
+        // value as argv[0] when constructing the argument list.
+        let mut full_args = vec!["main.wasm".to_string()];
+        full_args.extend(args.clone());
+        builder.inherit_stdio().args(&full_args);
         builder.inherit_stdin();
         builder.inherit_stderr();
         // builder.preopened_dir("/home", ".", DirPerms::all(), FilePerms::all()).expect("failed to open current directory");
@@ -357,9 +386,25 @@ impl Runtime {
                 |host| host.lind_fork_ctx.as_mut().unwrap(),
                 |host| host.fork(),
                 |webasm, enarx_conf, path, args, pid, next_cageid, lind_manager, envs| {
+                    // This closure is invoked during exec from `lind-multi-process::LindCtx::execve_call` in the lind-wasm. 
+                    // At that point, `args` has already been populated based on the inputs to `execv()`.
+                    // In the current design of lind-wasm-enarx, the arguments field from Enarx.toml is only applied to the 
+                    // initial wasm module, and is not used for subsequent exec calls. Therefore, we explicitly override the 
+                    // `args` field inside `enarx_conf` here.
+                    // Since the wasm binary is selected via the argument passed to `exec()`, we skip the first element of 
+                    // `args` (which represents the binary name).
+                    // Additionally, when Enarx.toml is not provided, `enarx_conf` will be `None`, so we insert a default 
+                    // `enarx_config::Config` object as needed before updating its `args` field.
+                    let mut new_enarx_conf = enarx_conf.clone();
+                    let conf = new_enarx_conf.get_or_insert_with(|| Config {
+                        args: vec![],  
+                        ..Default::default()
+                    });
+                    conf.args = args.get(1..).map_or(vec![], |s| s.to_vec());
+
                     Runtime::execute_with_lind(
                         webasm.clone(),
-                        enarx_conf.clone(),
+                        Some(conf.clone()),
                         lind_manager.clone(),
                         pid as u64,
                         next_cageid.clone(),
