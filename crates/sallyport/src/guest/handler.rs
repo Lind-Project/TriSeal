@@ -24,12 +24,13 @@ use crate::libc::{
     SYS_dup3, SYS_epoll_create1, SYS_epoll_ctl, SYS_epoll_pwait, SYS_epoll_wait, SYS_eventfd2,
     SYS_exit, SYS_exit_group, SYS_fcntl, SYS_fstat, SYS_futex, SYS_getegid, SYS_geteuid,
     SYS_getgid, SYS_getpid, SYS_getrandom, SYS_getsockname, SYS_getuid, SYS_ioctl, SYS_listen,
-    SYS_madvise, SYS_mmap, SYS_mprotect, SYS_mremap, SYS_munmap, SYS_nanosleep, SYS_open, SYS_pipe2, SYS_poll,
-    SYS_read, SYS_readlink, SYS_readv, SYS_recvfrom, SYS_rt_sigaction, SYS_rt_sigprocmask,
-    SYS_sendto, SYS_set_tid_address, SYS_setsockopt, SYS_sigaltstack, SYS_socket, SYS_sync,
-    SYS_uname, SYS_write, SYS_writev, CLOCK_MONOTONIC, EFAULT, EINVAL, ENOSYS, ENOTSUP, FIONBIO,
-    FIONREAD, FUTEX_PRIVATE_FLAG, FUTEX_WAIT, FUTEX_WAIT_BITSET, FUTEX_WAKE, MAP_ANONYMOUS,
-    MAP_PRIVATE, MREMAP_DONTUNMAP, MREMAP_FIXED, MREMAP_MAYMOVE, PROT_EXEC, PROT_READ, PROT_WRITE,
+    SYS_madvise, SYS_mmap, SYS_mprotect, SYS_mremap, SYS_munmap, SYS_nanosleep, SYS_open,
+    SYS_pipe2, SYS_poll, SYS_read, SYS_readlink, SYS_readv, SYS_recvfrom, SYS_rt_sigaction,
+    SYS_rt_sigprocmask, SYS_sendto, SYS_set_tid_address, SYS_setsockopt, SYS_sigaltstack,
+    SYS_socket, SYS_sync, SYS_uname, SYS_write, SYS_writev, CLOCK_MONOTONIC, EFAULT, EINVAL,
+    ENOSYS, ENOTSUP, FIONBIO, FIONREAD, FUTEX_PRIVATE_FLAG, FUTEX_WAIT, FUTEX_WAIT_BITSET,
+    FUTEX_WAKE, MAP_ANONYMOUS, MAP_PRIVATE, MREMAP_DONTUNMAP, MREMAP_FIXED, MREMAP_MAYMOVE,
+    PROT_EXEC, PROT_READ, PROT_WRITE,
 };
 use crate::{item, Result};
 

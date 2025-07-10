@@ -71,7 +71,6 @@ pub struct pollfd {
     pub revents: c_short,
 }
 
-
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct sigset_t {

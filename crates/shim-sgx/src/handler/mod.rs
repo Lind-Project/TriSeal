@@ -775,7 +775,7 @@ impl<'a> Handler<'a> {
 
         let Some(addr) = heap.mmap(None, length, access) else {
             debugln!(self, "ERROR heap.mmap() failed!!!!");
-            return Err(ENOMEM)
+            return Err(ENOMEM);
         };
 
         let ret = addr.into_nonnull();

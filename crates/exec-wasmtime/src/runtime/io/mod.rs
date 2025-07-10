@@ -4,8 +4,8 @@
 
 pub mod null;
 
-use wasmtime_wasi::preview1::types::Rights;
 use wasi_common::WasiFile;
+use wasmtime_wasi::preview1::types::Rights;
 
 pub fn stdio_file(mut file: impl WasiFile + 'static) -> (Box<dyn WasiFile>, Rights) {
     // Ensure wasmtime can detect the TTY.

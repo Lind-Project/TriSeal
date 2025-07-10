@@ -4,8 +4,8 @@ use super::super::types::Argv;
 use super::Alloc;
 use crate::guest::alloc::{Allocator, Collector};
 use crate::libc::{
-    SYS_close, SYS_dup, SYS_dup2, SYS_dup3, SYS_epoll_create1, SYS_eventfd2, SYS_exit,
-    SYS_exit_group, SYS_listen, SYS_socket, SYS_sync, epoll_event, SYS_epoll_ctl, SYS_pipe2
+    epoll_event, SYS_close, SYS_dup, SYS_dup2, SYS_dup3, SYS_epoll_create1, SYS_epoll_ctl,
+    SYS_eventfd2, SYS_exit, SYS_exit_group, SYS_listen, SYS_pipe2, SYS_socket, SYS_sync,
 };
 use crate::Result;
 
@@ -211,10 +211,13 @@ unsafe impl PassthroughAlloc for Pipe2 {
     type Ret = c_int;
 
     fn stage(self) -> Self::Argv {
-        Argv([self.pipefd.wrapping_add(0) as _, self.pipefd.wrapping_add(1) as _, self.flags as _])
+        Argv([
+            self.pipefd.wrapping_add(0) as _,
+            self.pipefd.wrapping_add(1) as _,
+            self.flags as _,
+        ])
     }
 }
-
 
 pub struct Exit {
     pub status: c_int,

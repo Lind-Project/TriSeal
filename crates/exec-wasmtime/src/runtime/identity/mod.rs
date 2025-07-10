@@ -9,8 +9,8 @@ use pki::PrivateKeyInfoExt;
 use platform::{Platform, Technology};
 use std::str::FromStr;
 
-use std::time::Duration;
 use std::io::Read;
+use std::time::Duration;
 
 use anyhow::{bail, Context};
 use const_oid::db::rfc5280::{
