@@ -23,22 +23,27 @@ use wasmtime_lind_utils::{lind_syscall_numbers::EXIT_SYSCALL, LindCageManager};
 use rawposix::safeposix::dispatcher::lind_syscall_api;
 use wiggle::tracing::trace_span;
 
-/// The MyCtx host structure stores all relevant execution context objects
+/// The base directory to preopen during the Wasm module linking stage,
+/// used to grant ambient directory access (via capability-based I/O)
+/// before instantiating the module.
+static HOME_DIR_PATH: &str = "/home";
+
+/// The HostCtx host structure stores all relevant execution context objects
 /// `preview1_ctx`: the WASI preview1 context (used by glibc and POSIX emulation);
 /// `lind_common_ctx`: the context responsible for per-cage state management (e.g., signal handling, cage ID tracking);
 /// `lind_fork_ctx`: the multi-process management structure, encapsulating fork/exec state;
 /// `wasi_threads`: which manages WASI thread-related capabilities.
 #[derive(Default, Clone)]
-struct MyCtx {
+struct HostCtx {
     preview1_ctx: Option<wasi_common::WasiCtx>,
-    wasi_threads: Option<Arc<WasiThreadsCtx<MyCtx>>>,
+    wasi_threads: Option<Arc<WasiThreadsCtx<HostCtx>>>,
     lind_common_ctx: Option<LindCommonCtx>,
-    lind_fork_ctx: Option<LindCtx<MyCtx, Option<enarx_config::Config>>>,
+    lind_fork_ctx: Option<LindCtx<HostCtx, Option<enarx_config::Config>>>,
 }
 
-/// This implementation allows MyCtx to be used where a mutable reference to `wasi_common::WasiCtx` 
+/// This implementation allows HostCtx to be used where a mutable reference to `wasi_common::WasiCtx` 
 /// is expected.
-impl AsMut<wasi_common::WasiCtx> for MyCtx {
+impl AsMut<wasi_common::WasiCtx> for HostCtx {
     fn as_mut(&mut self) -> &mut wasi_common::WasiCtx {
         self.preview1_ctx
             .as_mut()
@@ -46,7 +51,7 @@ impl AsMut<wasi_common::WasiCtx> for MyCtx {
     }
 }
 
-impl MyCtx {
+impl HostCtx {
     /// Performs a partial deep clone of the host context. It explicitly forks the WASI preview1 
     /// context(`preview1_ctx`), the lind multi-process context (`lind_fork_ctx`), and the lind common 
     /// context (`lind_common_ctx`). Other parts of the context, such as `wasi_threads`, are shared 
@@ -84,8 +89,8 @@ impl MyCtx {
     }
 }
 
-impl LindHost<MyCtx, Option<enarx_config::Config>> for MyCtx {
-    fn get_ctx(&self) -> LindCtx<MyCtx, Option<enarx_config::Config>> {
+impl LindHost<HostCtx, Option<enarx_config::Config>> for HostCtx {
+    fn get_ctx(&self) -> LindCtx<HostCtx, Option<enarx_config::Config>> {
         self.lind_fork_ctx.clone().unwrap()
     }
 }
@@ -131,10 +136,10 @@ impl Runtime {
             .in_scope(|| Engine::new(&config))
             .context("failed to create execution engine")?;
 
-        let Host = MyCtx::default();
+        let host = HostCtx::default();
 
         let mut wstore = trace_span!("initialize Wasmtime store")
-            .in_scope(|| Store::new(&engine, Host));
+            .in_scope(|| Store::new(&engine, host));
 
         let module = trace_span!("compile Wasm")
             .in_scope(|| Module::from_binary(&engine, &webasm))
@@ -149,7 +154,7 @@ impl Runtime {
         let mut linker = trace_span!("setup linker").in_scope(|| Linker::new(&engine));
         // Setup WASI-p1
         trace_span!("link WASI")
-            .in_scope(|| wasi_common::sync::add_to_linker(&mut linker, |s: &mut MyCtx| AsMut::<wasi_common::WasiCtx>::as_mut(s)))
+            .in_scope(|| wasi_common::sync::add_to_linker(&mut linker, |s: &mut HostCtx| AsMut::<wasi_common::WasiCtx>::as_mut(s)))
             .context("failed to setup linker and link WASI")?;
         let mut builder = WasiCtxBuilder::new();
         // In WASI, the argv semantics follow the POSIX convention: argv[0] is expected to be the program name, and argv[1..] 
@@ -162,19 +167,19 @@ impl Runtime {
         builder.inherit_stdin();
         builder.inherit_stderr();
         
-        let dir = Dir::open_ambient_dir("/home", cap_std::ambient_authority()).expect("failed to open /home");
+        let dir = Dir::open_ambient_dir(HOME_DIR_PATH, cap_std::ambient_authority()).expect(&format!("failed to open {}", HOME_DIR_PATH));
         builder.preopened_dir(dir, ".").expect("failed to open current directory");
         wstore.data_mut().preview1_ctx = Some(builder.build());
 
         // Setup WASI-thread
         trace_span!("link WASI-thread")
-            .in_scope(|| wasmtime_wasi_threads::add_to_linker(&mut linker, &wstore, &module, |s: &mut MyCtx| s.wasi_threads.as_ref().unwrap()))
+            .in_scope(|| wasmtime_wasi_threads::add_to_linker(&mut linker, &wstore, &module, |s: &mut HostCtx| s.wasi_threads.as_ref().unwrap()))
             .context("failed to setup linker and link WASI")?;
 
         // attach Lind-Common-Context to the host
         let shared_next_cageid = Arc::new(AtomicU64::new(1));
         {
-            wasmtime_lind_common::add_to_linker::<MyCtx, Option<enarx_config::Config>>(&mut linker, |host| {
+            wasmtime_lind_common::add_to_linker::<HostCtx, Option<enarx_config::Config>>(&mut linker, |host| {
                 host.lind_common_ctx.as_ref().unwrap()
             })?;
             wstore.data_mut().lind_common_ctx = Some(LindCommonCtx::new(shared_next_cageid.clone())?);
@@ -273,7 +278,7 @@ impl Runtime {
     /// This function is called when a new Wasm module is executed via an exec() syscall inside 
     /// a Wasm process. It mirrors much of the behavior of execute, but instead of reading 
     /// configuration from Enarx.toml, it uses an updated or synthetic config passed in at runtime. 
-    /// This config has its args explicitly overridden. A new MyCtx is created, associated with 
+    /// This config has its args explicitly overridden. A new HostCtx is created, associated with 
     /// a new PID, and the module is launched in its own cage. 
     pub fn execute_with_lind(
         // Wasm module
@@ -298,10 +303,10 @@ impl Runtime {
             .in_scope(|| Engine::new(&config))
             .context("failed to create execution engine")?;
 
-        let Host = MyCtx::default();
+        let host = HostCtx::default();
 
         let mut wstore = trace_span!("initialize Wasmtime store")
-            .in_scope(|| Store::new(&engine, Host));
+            .in_scope(|| Store::new(&engine, host));
 
         let module = trace_span!("compile Wasm")
             .in_scope(|| Module::from_binary(&engine, &webasm))
@@ -312,7 +317,7 @@ impl Runtime {
         let mut linker = trace_span!("setup linker").in_scope(|| Linker::new(&engine));
         // Setup WASI-p1
         trace_span!("link WASI")
-            .in_scope(|| wasi_common::sync::add_to_linker(&mut linker, |s: &mut MyCtx| AsMut::<wasi_common::WasiCtx>::as_mut(s)))
+            .in_scope(|| wasi_common::sync::add_to_linker(&mut linker, |s: &mut HostCtx| AsMut::<wasi_common::WasiCtx>::as_mut(s)))
             .context("failed to setup linker and link WASI")?;
         let mut builder = WasiCtxBuilder::new();
         // In WASI, the argv semantics follow the POSIX convention: argv[0] is expected to be the program name, and argv[1..] 
@@ -325,19 +330,19 @@ impl Runtime {
         builder.inherit_stdin();
         builder.inherit_stderr();
 
-        let dir = Dir::open_ambient_dir("/home", cap_std::ambient_authority()).expect("failed to open /home");
+        let dir = Dir::open_ambient_dir(HOME_DIR_PATH, cap_std::ambient_authority()).expect(&format!("failed to open {}", HOME_DIR_PATH));
         builder.preopened_dir(dir, ".").expect("failed to open current directory");
         wstore.data_mut().preview1_ctx = Some(builder.build());
 
         // Setup WASI-thread
         trace_span!("link WASI-thread")
-            .in_scope(|| wasmtime_wasi_threads::add_to_linker(&mut linker, &wstore, &module, |s: &mut MyCtx| s.wasi_threads.as_ref().unwrap()))
+            .in_scope(|| wasmtime_wasi_threads::add_to_linker(&mut linker, &wstore, &module, |s: &mut HostCtx| s.wasi_threads.as_ref().unwrap()))
             .context("failed to setup linker and link WASI")?;
 
         // attach Lind-Common-Context to the host
         let shared_next_cageid = Arc::new(AtomicU64::new(1));
         {
-            wasmtime_lind_common::add_to_linker::<MyCtx, Option<enarx_config::Config>>(&mut linker, |host| {
+            wasmtime_lind_common::add_to_linker::<HostCtx, Option<enarx_config::Config>>(&mut linker, |host| {
                 host.lind_common_ctx.as_ref().unwrap()
             })?;
             // Create a new lind ctx with the next cage ID since we are going to fork
@@ -414,8 +419,8 @@ impl Runtime {
     /// and executes its entry point. This is the point where the Wasm "process" actually starts 
     /// executing.
     fn load_main_module(
-        store: &mut Store<MyCtx>,
-        linker: &mut Linker<MyCtx>,
+        store: &mut Store<HostCtx>,
+        linker: &mut Linker<HostCtx>,
         module: &Module,
         pid: u64,
         args: &[String],
@@ -476,7 +481,7 @@ impl Runtime {
 
     /// This function takes a Wasm function (Func) and a list of string arguments, parses the 
     /// arguments into Wasm values based on expected types (ValType), and invokes the function
-    fn invoke_func(store: &mut Store<MyCtx>, func: Func, args: &[String]) -> Result<Vec<Val>> {
+    fn invoke_func(store: &mut Store<HostCtx>, func: Func, args: &[String]) -> Result<Vec<Val>> {
         let ty = func.ty(&store);
         if ty.params().len() > 0 {
             eprintln!(
