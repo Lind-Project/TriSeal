@@ -675,7 +675,9 @@ impl Handler for HostCall<'_> {
 
                 let shim_page_table = SHIM_PAGETABLE.read();
 
-                let TranslateResult::Mapped { flags, .. } = shim_page_table.translate(VirtAddr::from_ptr(old_address.as_ptr())) else {
+                let TranslateResult::Mapped { flags, .. } =
+                    shim_page_table.translate(VirtAddr::from_ptr(old_address.as_ptr()))
+                else {
                     return Err(EINVAL);
                 };
 
@@ -688,7 +690,9 @@ impl Handler for HostCall<'_> {
 
                 // Check, that all pages have the same permissions as the first
                 for page in old_page_range.skip(1) {
-                    let TranslateResult::Mapped { flags, .. } = shim_page_table.translate(page.start_address()) else {
+                    let TranslateResult::Mapped { flags, .. } =
+                        shim_page_table.translate(page.start_address())
+                    else {
                         return Err(EINVAL);
                     };
 

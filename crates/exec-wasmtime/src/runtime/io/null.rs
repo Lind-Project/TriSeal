@@ -23,10 +23,7 @@ impl WasiFile for Null {
         Ok(FdFlags::APPEND | FdFlags::NONBLOCK)
     }
 
-    async fn read_vectored<'a>(
-        &self,
-        _bufs: &mut [std::io::IoSliceMut<'a>],
-    ) -> Result<u64, Error> {
+    async fn read_vectored<'a>(&self, _bufs: &mut [std::io::IoSliceMut<'a>]) -> Result<u64, Error> {
         Ok(0)
     }
 

@@ -135,8 +135,8 @@ mod test {
     use super::Options;
     use crate::backend::{Backend, Datum, Keep, Signatures};
     use anyhow::bail;
-    use std::sync::Lazy;
     use serde_json::json;
+    use std::sync::Lazy;
     use std::{ops::Deref, sync::Arc};
 
     #[test]
