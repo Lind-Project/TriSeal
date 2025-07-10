@@ -39,6 +39,11 @@ webpki-roots = { workspace = true }
 wiggle = { workspace = true, features = ["tracing_log"] }
 x509-cert = { workspace = true }
 zeroize = { workspace = true }
+wasmtime-lind-common = { workspace = true }
+wasmtime-lind-multi-process = { workspace = true }
+wasmtime-lind-utils = { workspace = true }
+rawposix = { workspace = true }
+wasmtime-wasi-threads = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 io-extras = { workspace = true }
