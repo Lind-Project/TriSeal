@@ -43,6 +43,8 @@ wasmtime-lind-common = { workspace = true }
 wasmtime-lind-multi-process = { workspace = true }
 wasmtime-lind-utils = { workspace = true }
 rawposix = { workspace = true }
+threei = { workspace = true }
+cage = { workspace = true }
 wasmtime-wasi-threads = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
