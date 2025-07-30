@@ -367,21 +367,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8c3c1a368f70d6cf7302d78f8f7093da241fb8e8807c05cc9e51a125895a6d5b"
 
 [[package]]
-name = "bit-set"
-version = "0.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0700ddab506f33b20a03b13996eccd309a48e5ff77d0d95926aa0210fb4e95f1"
-dependencies = [
- "bit-vec",
-]
-
-[[package]]
-name = "bit-vec"
-version = "0.6.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "349f9b6a179ed607305526ca489b34ad0a41aed5f7980fa90eb03160b69598fb"
-
-[[package]]
 name = "bit_field"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -475,10 +460,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f61dac84819c6588b558454b194026eb1f09c293b9036ae9b159e74e73ab6cf9"
 
 [[package]]
-name = "cache-padded"
-version = "1.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "981520c98f422fcc584dc1a95c334e6953900b9106bc47a9839b81790009eb21"
+name = "cage"
+version = "0.1.0"
+dependencies = [
+ "dashmap",
+ "fdtables",
+ "libc",
+ "nodit",
+ "once_cell",
+ "parking_lot",
+ "quick_cache",
+ "sysdefs",
+]
 
 [[package]]
 name = "camino"
@@ -1290,6 +1283,7 @@ name = "enarx-exec-wasmtime"
 version = "0.7.1"
 dependencies = [
  "anyhow",
+ "cage",
  "cap-std",
  "const-oid",
  "enarx-config",
@@ -1308,6 +1302,7 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "tempfile",
+ "threei",
  "toml",
  "tracing",
  "tracing-flame",
@@ -1802,12 +1797,6 @@ dependencies = [
  "rand_core 0.6.4",
  "subtle",
 ]
-
-[[package]]
-name = "half"
-version = "1.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b43ede17f21864e81be2fa654110bf1e793774238d86ef8555c37e6519c0403"
 
 [[package]]
 name = "hashbrown"
@@ -3081,18 +3070,17 @@ dependencies = [
 name = "rawposix"
 version = "0.1.0"
 dependencies = [
- "bit-set",
+ "cage",
  "dashmap",
  "fdtables",
  "lazy_static",
  "libc",
- "nodit",
+ "once_cell",
  "parking_lot",
- "quick_cache",
- "ringbuf",
- "serde",
- "serde_cbor",
  "sysdefs",
+ "tracing",
+ "tracing-subscriber",
+ "typemap",
 ]
 
 [[package]]
@@ -3220,15 +3208,6 @@ dependencies = [
  "spin 0.9.8",
  "untrusted 0.9.0",
  "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "ringbuf"
-version = "0.2.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f65af18d50f789e74aaf23bbb3f65dcd22a3cb6e029b5bced149f6bd57c5c2a2"
-dependencies = [
- "cache-padded",
 ]
 
 [[package]]
@@ -3484,17 +3463,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3a1a3341211875ef120e117ea7fd5228530ae7e7036a779fdc9117be6b3282c"
 dependencies = [
  "ordered-float",
- "serde",
-]
-
-[[package]]
-name = "serde_cbor"
-version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7081ed758ec726a6ed8ee7e92f5d3f6e6f8c3901b1f972e3a4a2f2599fad14f"
-dependencies = [
- "byteorder",
- "half",
  "serde",
 ]
 
@@ -3958,6 +3926,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "threei"
+version = "0.1.0"
+dependencies = [
+ "cage",
+ "dashmap",
+ "lazy_static",
+ "libc",
+ "once_cell",
+ "parking_lot",
+ "rawposix",
+ "sysdefs",
+ "typemap",
+]
+
+[[package]]
 name = "tinystr"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4100,6 +4083,16 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log",
+]
+
+[[package]]
+name = "typemap"
+version = "0.1.0"
+dependencies = [
+ "cage",
+ "fdtables",
+ "libc",
+ "sysdefs",
 ]
 
 [[package]]
@@ -4425,6 +4418,7 @@ dependencies = [
  "anyhow",
  "bitflags 2.8.0",
  "bumpalo",
+ "cage",
  "cc",
  "cfg-if 1.0.0",
  "hashbrown 0.14.5",
@@ -4447,6 +4441,7 @@ dependencies = [
  "sptr",
  "sysdefs",
  "target-lexicon",
+ "threei",
  "wasmparser 0.211.1",
  "wasmtime-asm-macros 23.0.0",
  "wasmtime-component-macro 23.0.0",
@@ -4696,6 +4691,7 @@ dependencies = [
  "log",
  "rand 0.8.5",
  "rawposix",
+ "threei",
  "wasmtime 23.0.0",
  "wasmtime-environ 23.0.0",
  "wasmtime-lind-multi-process",
@@ -4706,10 +4702,12 @@ name = "wasmtime-lind-multi-process"
 version = "23.0.0"
 dependencies = [
  "anyhow",
+ "cage",
  "log",
  "rand 0.8.5",
  "rawposix",
  "sysdefs",
+ "threei",
  "wasi-common",
  "wasmtime 23.0.0",
  "wasmtime-environ 23.0.0",

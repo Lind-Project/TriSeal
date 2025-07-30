@@ -1,3 +1,5 @@
 args = [
-    "hello"
+    "hello.c",
+    "-o",
+    "hello-3i",
 ]
