@@ -235,6 +235,8 @@ wasmtime-lind-multi-process = { path = "../lind-wasm/src/wasmtime/crates/lind-mu
 wasmtime-lind-utils = { path = "../lind-wasm/src/wasmtime/crates/lind-utils" }
 wasmtime-wasi-threads = { path = "../lind-wasm/src/wasmtime/crates/wasi-threads" }
 rawposix = { path = "../lind-wasm/src/wasmtime/crates/rawposix" }
+cage = { path = "../lind-wasm/src/wasmtime/crates/cage" }
+threei = { path = "../lind-wasm/src/wasmtime/crates/threei" }
 cap-std = { version = "3.4.2", default-features = false }
 io-lifetimes = { version = "2.0.4", default-features = false }
 rustix = { version = "0.38.44", features = ["std"], default-features = false }
