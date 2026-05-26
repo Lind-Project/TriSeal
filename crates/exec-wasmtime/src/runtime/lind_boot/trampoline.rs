@@ -1,5 +1,5 @@
-use crate::lind_wasmtime::host::submit_grate_request;
-use crate::{options::LindBootOptions, lind_wasmtime::host::HostCtx};
+use super::host::{submit_grate_request, HostCtx};
+use super::options::LindBootOptions;
 use threei::threei_const;
 use wasmtime_lind_3i::*;
 use wasmtime_lind_multi_process;

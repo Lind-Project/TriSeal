@@ -1,4 +1,4 @@
-use crate::options::LindBootOptions;
+use super::options::LindBootOptions;
 use std::sync::{Arc, Mutex, OnceLock};
 use sysdefs::constants::lind_platform_const;
 use wasmtime::Table;

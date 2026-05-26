@@ -220,7 +220,7 @@ tracing-subscriber = { version = "0.3.15", features = ["env-filter", "fmt"], def
 ureq = { version = "2.4.0", default-features = false }
 url = { version = "2.2.2", default-features = false }
 vdso = { version = "0.2.2", default-features = false }
-wat = { version = "1.0.0", default-features = false }
+wat = { version = "1.246.1", default-features = false }
 webpki-roots = { version = "0.22.2", default-features = false }
 x509-cert = { version = "0.2.4", features = ["std"], default-features = false }
 x86_64 = { version = "0.14.11", default-features = false }
@@ -229,19 +229,20 @@ zeroize = { version = "1.5.4", features = ["alloc"], default-features = false }
 
 # wasmtime and its pinned dependencies
 # these will need to be updated together
-wasmtime = { path = "../lind-wasm/src/wasmtime/crates/wasmtime", features = ["cranelift", "pooling-allocator", "gc-null", "threads", "demangle", "addr2line", "cache", "anyhow"], default-features = false }
-wasmtime-lind-dylink = { path = "../lind-wasm/src/wasmtime/crates/lind-dylink" }
-wasmtime-lind-3i = { path = "../lind-wasm/src/wasmtime/crates/lind-3i" }
 wasmtime-lind-common = { path = "../lind-wasm/src/wasmtime/crates/lind-common" }
+wasmtime-lind-dylink = { path = "../lind-wasm/src/wasmtime/crates/lind-dylink" }
 wasmtime-lind-multi-process = { path = "../lind-wasm/src/wasmtime/crates/lind-multi-process" }
 wasmtime-lind-utils = { path = "../lind-wasm/src/wasmtime/crates/lind-utils" }
-wasmtime-wasi-threads = { path = "../lind-wasm/src/wasmtime/crates/wasi-threads" }
 rawposix = { path = "../lind-wasm/src/wasmtime/crates/rawposix" }
 cage = { path = "../lind-wasm/src/wasmtime/crates/cage" }
 threei = { path = "../lind-wasm/src/wasmtime/crates/threei" }
+sysdefs = { path = "../lind-wasm/src/wasmtime/crates/sysdefs" }
+typemap = { path = "../lind-wasm/src/wasmtime/crates/typemap" }
+wasmtime-lind-3i = { path = "../lind-wasm/src/wasmtime/crates/lind-3i" }
+wasmtime = { path = "../lind-wasm/src/wasmtime/crates/wasmtime", features = ["cranelift", "pooling-allocator", "gc-null", "threads", "demangle", "addr2line", "cache", "anyhow"], default-features = false }
+wasmtime-wasi = { version = "23.0.0", features = ["preview1"] , default-features = false }
 cap-std = { version = "3.4.2", default-features = false }
 io-lifetimes = { version = "2.0.4", default-features = false }
 rustix = { version = "0.38.44", features = ["std"], default-features = false }
-wasi-common = { path = "../lind-wasm/src/wasmtime/crates/wasi-common", features = ["sync"] ,default-features = false }
-wasmtime-wasi = { path = "../lind-wasm/src/wasmtime/crates/wasi" }
 wiggle = { version = "23.0.0", default-features = false }
+wasi-common = { path = "../lind-wasm/src/wasmtime/crates/wasi-common", features = ["sync"] ,default-features = false }

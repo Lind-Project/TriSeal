@@ -1,10 +1,13 @@
-use crate::lind_wasmtime::host::DylinkMetadata;
-use crate::lind_wasmtime::host::{
+use super::host::DylinkMetadata;
+use super::host::HostCtx;
+use super::host::{
     cleanup_grate_handler, init_grate_pool, register_grate_handler_for_cage,
     unregister_grate_handler,
 };
-use crate::{options::LindBootOptions, lind_wasmtime::host::HostCtx, lind_wasmtime::trampoline::*};
-use anyhow::{Context, Result, anyhow, bail};
+use super::options::LindBootOptions;
+use super::trampoline::*;
+use crate::Workload;
+use anyhow::{anyhow, bail, Context, Result};
 use cage::signal::{lind_signal_init, signal_may_trigger};
 use cfg_if::cfg_if;
 use std::os::unix::fs::MetadataExt;
@@ -16,7 +19,7 @@ use sysdefs::constants::lind_platform_const::{
     INSTANCE_NUMBER, RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, WASMTIME_CAGEID,
 };
 use sysdefs::constants::syscall_const::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
-use sysdefs::constants::{DEFAULT_STACKSIZE, DylinkErrorCode, GUARD_SIZE, TABLE_START_INDEX};
+use sysdefs::constants::{DylinkErrorCode, DEFAULT_STACKSIZE, GUARD_SIZE, TABLE_START_INDEX};
 use sysdefs::logging::lind_debug_panic;
 use threei::threei_const;
 use wasmtime::{
@@ -27,7 +30,7 @@ use wasmtime_lind_3i::*;
 use wasmtime_lind_common::LindEnviron;
 use wasmtime_lind_dylink::DynamicLoader;
 use wasmtime_lind_multi_process::{
-    CAGE_START_ID, LindCtx, THREAD_START_ID, attach_shared_memory, early_init_stack,
+    attach_shared_memory, early_init_stack, LindCtx, CAGE_START_ID, THREAD_START_ID,
 };
 use wasmtime_lind_utils::symbol_table::SymbolMap;
 use wasmtime_lind_utils::{LindCageManager, LindGOT};
@@ -85,20 +88,19 @@ pub fn execute_wasmtime(lindboot_cli: LindBootOptions, workload: Workload) -> an
     init_vmctx_pool();
 
     // -- Initialize the Wasmtime execution environment --
-    // let wasm_file_path = Path::new(lindboot_cli.wasm_file());
-    let wasm_file_fd = workload.fd;
     let wt_config =
         make_wasmtime_config(lindboot_cli.wasmtime_backtrace, lindboot_cli.enable_fpcast);
     let engine = Engine::new(&wt_config)
         .map_err(anyhow::Error::from)
         .context("failed to create execution engine")?;
-    // let module = read_wasm_or_cwasm(&engine, wasm_file_path)?;
-    let module = Module::from_file(&engine, &wasm_file_fd)
-        .map_err(anyhow::Error::from)
-        .context(format!(
-            "failed to load module from fd {}",
-            wasm_file_fd
-        ))?;
+    let module = match Engine::detect_precompiled(&workload.webasm) {
+        Some(_) => unsafe { Module::deserialize(&engine, &workload.webasm) }
+            .map_err(anyhow::Error::from)
+            .context("failed to deserialize precompiled Wasm module from workload bytes")?,
+        None => Module::from_binary(&engine, &workload.webasm)
+            .map_err(anyhow::Error::from)
+            .context("failed to compile Wasm module from workload bytes")?,
+    };
 
     // -- Run the first module in the first cage --
     let result = execute_with_lind(
