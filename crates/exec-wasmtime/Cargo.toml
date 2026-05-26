@@ -46,6 +46,8 @@ rawposix = { workspace = true }
 threei = { workspace = true }
 cage = { workspace = true }
 wasmtime-wasi-threads = { workspace = true }
+wasmtime-lind-dylink = { workspace = true }
+wasmtime-lind-3i = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 io-extras = { workspace = true }
