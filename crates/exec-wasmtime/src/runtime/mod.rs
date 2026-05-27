@@ -11,8 +11,13 @@ use super::{Package, Workload};
 
 use anyhow::Context;
 use enarx_config::{Config, File};
+use std::ffi::CString;
+use std::path::Path;
+
 use rawposix::init::{rawposix_shutdown, rawposix_start};
 use wasmtime::Val;
+
+pub const LINDFS_ROOT: &str = "/home/alice/lind-wasm/lindfs";
 
 // The Enarx Wasm runtime
 #[derive(Clone)]
@@ -54,10 +59,39 @@ impl Runtime {
             chroot_lindfs: false,
         };
 
+        chroot_to_lindfs();
+
         rawposix_start(0);
         let code = lind_boot::execute_wasmtime(options, workload)?;
         rawposix_shutdown();
 
         Ok(vec![Val::I32(code)])
+    }
+}
+
+fn chroot_to_lindfs() {
+    unsafe {
+        let lindfs_path = CString::new(LINDFS_ROOT).unwrap();
+
+        if !Path::new(LINDFS_ROOT).is_dir() {
+            panic!("The configured lindfs does not exist: {}", LINDFS_ROOT);
+        }
+
+        let ret = libc::chroot(lindfs_path.as_ptr());
+        if ret != 0 {
+            panic!(
+                "Failed to chroot to {}: {}",
+                LINDFS_ROOT,
+                std::io::Error::last_os_error()
+            );
+        }
+        let root = CString::new("/").unwrap();
+        let ret = libc::chdir(root.as_ptr());
+        if ret != 0 {
+            panic!(
+                "Failed to chdir to / after chroot: {}",
+                std::io::Error::last_os_error()
+            )
+        }
     }
 }
