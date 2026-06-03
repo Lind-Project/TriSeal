@@ -5,17 +5,18 @@
 mod identity;
 mod io;
 //mod net;
-mod lind_boot;
+// mod lind_boot;
 
 use super::{Package, Workload};
 
 use anyhow::Context;
 use enarx_config::{Config, File};
 use std::ffi::CString;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use rawposix::init::{rawposix_shutdown, rawposix_start};
 use wasmtime::Val;
+use lind_boot;
 
 pub const LINDFS_ROOT: &str = "/home/alice/lind-wasm/lindfs";
 
@@ -48,21 +49,29 @@ impl Runtime {
             .map(|(name, value)| (name, Some(value)))
             .collect();
 
-        let options = lind_boot::LindBootOptions {
-            args,
-            vars,
-            preloads: Vec::new(),
+        let options = lind_boot::cli::CliOptions {
+            verbose: 0,
+            debug: false,
             precompile: false,
             wasmtime_backtrace: false,
             enable_fpcast: false,
+            wasm_bytes: Some(workload.webasm.clone()),
+
+            // args[0] is still guest argv[0], even though module bytes come from wasm_bytes.
+            args,
+
+            vars,
+            preloads: vec![
+                ("env".to_string(), PathBuf::from("/home/alice/lind-wasm/lindfs/lib/libc.cwasm")),
+                ("env".to_string(), PathBuf::from("/home/alice/lind-wasm/lindfs/lib/libm.cwasm")),
+            ],
             thread_stack_size: 64 * 1024 * 1024,
-            chroot_lindfs: false,
         };
 
-        chroot_to_lindfs();
+        // chroot_to_lindfs();
 
         rawposix_start(0);
-        let code = lind_boot::execute_wasmtime(options, workload)?;
+        let code = lind_boot::execute_wasmtime(options)?;
         rawposix_shutdown();
 
         Ok(vec![Val::I32(code)])

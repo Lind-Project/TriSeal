@@ -238,6 +238,7 @@ cage = { path = "../lind-wasm/src/wasmtime/crates/cage" }
 threei = { path = "../lind-wasm/src/wasmtime/crates/threei" }
 sysdefs = { path = "../lind-wasm/src/wasmtime/crates/sysdefs" }
 typemap = { path = "../lind-wasm/src/wasmtime/crates/typemap" }
+lind-boot = { path = "../lind-wasm/src/lind-boot" }
 wasmtime-lind-3i = { path = "../lind-wasm/src/wasmtime/crates/lind-3i" }
 wasmtime = { path = "../lind-wasm/src/wasmtime/crates/wasmtime", features = ["cranelift", "pooling-allocator", "gc-null", "threads", "demangle", "addr2line", "cache", "anyhow"], default-features = false }
 wasmtime-wasi = { version = "23.0.0", features = ["preview1"] , default-features = false }
