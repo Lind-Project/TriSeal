@@ -390,6 +390,16 @@ impl guest::Handler for Handler<'_> {
         fd: c_int,
         offset: off_t,
     ) -> sallyport::Result<NonNull<c_void>> {
+        debugln!(
+            self,
+            "[enarx-mmap] addr={:?} len={:#x} prot={:#x} flags={:#x} fd={} offset={}",
+            addr,
+            len,
+            prot,
+            flags,
+            fd,
+            offset
+        );
         let addr = addr.map(|v| v.as_ptr() as usize).unwrap_or(0);
         // TODO: https://github.com/enarx/enarx/issues/1892
         let prot = prot | PROT_READ;

@@ -61,46 +61,14 @@ impl Runtime {
             args,
 
             vars,
-            preloads: vec![
-                ("env".to_string(), PathBuf::from("/home/alice/lind-wasm/lindfs/lib/libc.cwasm")),
-                ("env".to_string(), PathBuf::from("/home/alice/lind-wasm/lindfs/lib/libm.cwasm")),
-            ],
+            preloads: Vec::new(),
             thread_stack_size: 64 * 1024 * 1024,
         };
-
-        // chroot_to_lindfs();
 
         rawposix_start(0);
         let code = lind_boot::execute_wasmtime(options)?;
         rawposix_shutdown();
 
         Ok(vec![Val::I32(code)])
-    }
-}
-
-fn chroot_to_lindfs() {
-    unsafe {
-        let lindfs_path = CString::new(LINDFS_ROOT).unwrap();
-
-        if !Path::new(LINDFS_ROOT).is_dir() {
-            panic!("The configured lindfs does not exist: {}", LINDFS_ROOT);
-        }
-
-        let ret = libc::chroot(lindfs_path.as_ptr());
-        if ret != 0 {
-            panic!(
-                "Failed to chroot to {}: {}",
-                LINDFS_ROOT,
-                std::io::Error::last_os_error()
-            );
-        }
-        let root = CString::new("/").unwrap();
-        let ret = libc::chdir(root.as_ptr());
-        if ret != 0 {
-            panic!(
-                "Failed to chdir to / after chroot: {}",
-                std::io::Error::last_os_error()
-            )
-        }
     }
 }
