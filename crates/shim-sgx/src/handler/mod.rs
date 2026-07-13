@@ -54,8 +54,9 @@ use sallyport::guest::{self, Handler as _, Platform, ThreadLocalStorage};
 use sallyport::item::enarxcall::sgx::{Report, ReportData, TargetInfo, TECH};
 use sallyport::item::enarxcall::{SYS_GETATT, SYS_GETKEY};
 use sallyport::libc::{
-    off_t, pid_t, CloneFlags, SYS_clock_gettime, EACCES, EAGAIN, EINVAL, EIO, EMSGSIZE, ENOMEM,
-    ENOSYS, ENOTSUP, MAP_ANONYMOUS, MAP_PRIVATE, PROT_EXEC, PROT_READ, PROT_WRITE, STDERR_FILENO,
+    off_t, pid_t, CloneFlags, SYS_clock_gettime, SYS_futex, SYS_sched_yield, EACCES, EAGAIN,
+    EINVAL, EIO, EMSGSIZE, ENOMEM, ENOSYS, ENOTSUP, MAP_ANONYMOUS, MAP_PRIVATE, PROT_EXEC,
+    PROT_READ, PROT_WRITE, STDERR_FILENO,
 };
 use sallyport::Error;
 use sgx::page::{Class, Flags};
@@ -216,6 +217,23 @@ impl guest::Handler for Handler<'_> {
         core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::Acquire);
 
         Ok(())
+    }
+
+    fn debug_futex_wake(
+        &mut self,
+        uaddr: *const AtomicU32,
+        futex_op: c_int,
+        val: u32,
+        val3: u32,
+        current: u32,
+        waiters: usize,
+        wake_count: usize,
+    ) {
+        let tid = self.tcb.tid;
+        debugln!(
+            self,
+            "[{tid}] futex wake: uaddr={uaddr:p} op={futex_op:#x} val={val} val3={val3:#x} current={current} waiters={waiters} wake_count={wake_count}",
+        );
     }
 
     fn block(&self) -> &[usize] {
@@ -660,10 +678,34 @@ impl<'a> Handler<'a> {
         let orig_rdx = self.ssa.gpr.rdx;
         let nr = self.ssa.gpr.rax as usize;
         let tid = self.tcb.tid;
+        let futex_args = if nr == SYS_futex as usize {
+            Some((
+                self.ssa.gpr.rdi,
+                self.ssa.gpr.rsi,
+                self.ssa.gpr.rdx,
+                self.ssa.gpr.r10,
+                self.ssa.gpr.r8,
+                self.ssa.gpr.r9,
+            ))
+        } else {
+            None
+        };
 
         // reduce log spam
-        if nr != SYS_clock_gettime as _ {
+        if nr != SYS_clock_gettime as _ && nr != SYS_sched_yield as _ {
             debugln!(self, "[{tid}] syscall {nr} ...");
+        }
+        if let Some((uaddr, op, val, timeout, uaddr2, val3)) = futex_args {
+            debugln!(
+                self,
+                "[{tid}] futex enter: uaddr={:#x} op={:#x} val={} timeout={:#x} uaddr2={:#x} val3={:#x}",
+                uaddr,
+                op,
+                val,
+                timeout,
+                uaddr2,
+                val3
+            );
         }
 
         let usermemscope = UserMemScope;
@@ -725,8 +767,21 @@ impl<'a> Handler<'a> {
         self.ssa.gpr.rip += 2;
 
         // reduce log spam
-        if nr != SYS_clock_gettime as _ {
+        if nr != SYS_clock_gettime as _ && nr != SYS_sched_yield as _ {
             debugln!(self, "[{tid}] syscall {nr} = {}", self.ssa.gpr.rax as isize);
+        }
+        if let Some((uaddr, op, val, timeout, uaddr2, val3)) = futex_args {
+            debugln!(
+                self,
+                "[{tid}] futex exit: uaddr={:#x} op={:#x} val={} timeout={:#x} uaddr2={:#x} val3={:#x} ret={}",
+                uaddr,
+                op,
+                val,
+                timeout,
+                uaddr2,
+                val3,
+                self.ssa.gpr.rax as isize
+            );
         }
     }
 
@@ -1171,7 +1226,7 @@ impl<'a> Handler<'a> {
         let tid = self.tcb.tid;
         let addr = addr & !(Page::SIZE - 1);
 
-        debugln!(self, "[{tid}] handle_page_fault: {addr:#x} {error_code:?}");
+        // debugln!(self, "[{tid}] handle_page_fault: {addr:#x} {error_code:?}");
 
         // check for non-valid flags
         if !error_code

@@ -26,11 +26,12 @@ use crate::libc::{
     SYS_getgid, SYS_getpid, SYS_getrandom, SYS_getsockname, SYS_getuid, SYS_ioctl, SYS_listen,
     SYS_madvise, SYS_mmap, SYS_mprotect, SYS_mremap, SYS_munmap, SYS_nanosleep, SYS_open,
     SYS_pipe2, SYS_poll, SYS_read, SYS_readlink, SYS_readv, SYS_recvfrom, SYS_rt_sigaction,
-    SYS_rt_sigprocmask, SYS_sendto, SYS_set_tid_address, SYS_setsockopt, SYS_sigaltstack,
-    SYS_socket, SYS_sync, SYS_uname, SYS_write, SYS_writev, CLOCK_MONOTONIC, EFAULT, EINVAL,
-    ENOSYS, ENOTSUP, FIONBIO, FIONREAD, FUTEX_PRIVATE_FLAG, FUTEX_WAIT, FUTEX_WAIT_BITSET,
-    FUTEX_WAKE, MAP_ANONYMOUS, MAP_PRIVATE, MREMAP_DONTUNMAP, MREMAP_FIXED, MREMAP_MAYMOVE,
-    PROT_EXEC, PROT_READ, PROT_WRITE,
+    SYS_rt_sigprocmask, SYS_sched_yield, SYS_sendto, SYS_set_tid_address, SYS_setsockopt,
+    SYS_sigaltstack, SYS_socket, SYS_sync, SYS_uname, SYS_write, SYS_writev, CLOCK_MONOTONIC,
+    EAGAIN, EFAULT, EINVAL, ENOMEM, ENOSYS, ENOTSUP, FIONBIO, FIONREAD, FUTEX_CLOCK_REALTIME,
+    FUTEX_PRIVATE_FLAG, FUTEX_WAIT, FUTEX_WAIT_BITSET, FUTEX_WAKE, FUTEX_WAKE_BITSET,
+    MAP_ANONYMOUS, MAP_PRIVATE, MREMAP_DONTUNMAP, MREMAP_FIXED, MREMAP_MAYMOVE, PROT_EXEC,
+    PROT_READ, PROT_WRITE,
 };
 use crate::{item, Result};
 
@@ -39,13 +40,123 @@ use core::ffi::{c_int, c_long, c_size_t, c_uint, c_ulong, c_void};
 use core::mem::size_of;
 use core::ptr::NonNull;
 use core::slice;
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicUsize, Ordering};
+
+const FUTEX_WAITER_BUCKETS: usize = 128;
+
+struct FutexBucket {
+    key: AtomicUsize,
+    waiters: AtomicUsize,
+}
+
+impl FutexBucket {
+    const fn new() -> Self {
+        Self {
+            key: AtomicUsize::new(0),
+            waiters: AtomicUsize::new(0),
+        }
+    }
+}
+
+struct FutexTableGuard;
+
+impl Drop for FutexTableGuard {
+    fn drop(&mut self) {
+        FUTEX_TABLE_LOCK.store(false, Ordering::Release);
+    }
+}
+
+static FUTEX_TABLE_LOCK: AtomicBool = AtomicBool::new(false);
+static FUTEX_PARK_EXPECTED: AtomicI32 = AtomicI32::new(0);
+static FUTEX_WAITERS: [FutexBucket; FUTEX_WAITER_BUCKETS] =
+    [const { FutexBucket::new() }; FUTEX_WAITER_BUCKETS];
+
+fn futex_lock_table() -> FutexTableGuard {
+    while FUTEX_TABLE_LOCK
+        .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+        .is_err()
+    {
+        core::hint::spin_loop();
+    }
+
+    FutexTableGuard
+}
+
+fn futex_key(uaddr: &AtomicU32) -> usize {
+    uaddr as *const AtomicU32 as usize
+}
+
+fn futex_add_waiter(key: usize) -> Result<()> {
+    let _guard = futex_lock_table();
+
+    for bucket in FUTEX_WAITERS.iter() {
+        if bucket.key.load(Ordering::Relaxed) == key {
+            let waiters = bucket.waiters.load(Ordering::Relaxed);
+            bucket
+                .waiters
+                .store(waiters.checked_add(1).ok_or(ENOMEM)?, Ordering::Relaxed);
+            return Ok(());
+        }
+    }
+
+    for bucket in FUTEX_WAITERS.iter() {
+        if bucket.key.load(Ordering::Relaxed) == 0 {
+            bucket.waiters.store(1, Ordering::Relaxed);
+            bucket.key.store(key, Ordering::Relaxed);
+            return Ok(());
+        }
+    }
+
+    Err(ENOMEM)
+}
+
+fn futex_remove_waiter(key: usize) {
+    let _guard = futex_lock_table();
+
+    for bucket in FUTEX_WAITERS.iter() {
+        if bucket.key.load(Ordering::Relaxed) == key {
+            let waiters = bucket.waiters.load(Ordering::Relaxed);
+            if waiters <= 1 {
+                bucket.waiters.store(0, Ordering::Relaxed);
+                bucket.key.store(0, Ordering::Relaxed);
+            } else {
+                bucket.waiters.store(waiters - 1, Ordering::Relaxed);
+            }
+            return;
+        }
+    }
+}
+
+fn futex_waiter_count(key: usize) -> usize {
+    let _guard = futex_lock_table();
+
+    for bucket in FUTEX_WAITERS.iter() {
+        if bucket.key.load(Ordering::Relaxed) == key {
+            return bucket.waiters.load(Ordering::Relaxed);
+        }
+    }
+
+    0
+}
 
 /// Guest request handler.
 pub trait Handler {
     /// Suspend guest execution and pass control to host.
     /// This function will return when the host passes control back to the guest.
     fn sally(&mut self) -> Result<()>;
+
+    /// Optional debug hook for futex wake decisions.
+    fn debug_futex_wake(
+        &mut self,
+        _uaddr: *const AtomicU32,
+        _futex_op: c_int,
+        _val: u32,
+        _val3: u32,
+        _current: u32,
+        _waiters: usize,
+        _wake_count: usize,
+    ) {
+    }
 
     /// Returns an immutable borrow of the sallyport block.
     fn block(&self) -> &[usize];
@@ -288,10 +399,9 @@ pub trait Handler {
         _uaddr2: Option<&mut AtomicU32>,
         val3: u32,
     ) -> Result<c_long> {
-        // The `FUTEX_PRIVATE_FLAG` is only interesting,
-        // if the shims would support multiple processes, which they don't.
-        let futex_op = futex_op & !FUTEX_PRIVATE_FLAG;
-        let mut expected_park_val: c_int = 0;
+        // These are flags layered on top of the base futex operation.
+        let futex_op = futex_op & !(FUTEX_PRIVATE_FLAG | FUTEX_CLOCK_REALTIME);
+        let key = futex_key(uaddr);
 
         match futex_op {
             FUTEX_WAIT => {
@@ -309,9 +419,23 @@ pub trait Handler {
                     timeout.tv_nsec %= 1_000_000_000;
                     timeout
                 });
-                while uaddr.load(Ordering::Relaxed) == val {
-                    expected_park_val = self.park(expected_park_val, timeout.as_ref())?;
+
+                if uaddr.load(Ordering::SeqCst) != val {
+                    return Err(EAGAIN);
                 }
+
+                futex_add_waiter(key)?;
+
+                if uaddr.load(Ordering::SeqCst) != val {
+                    futex_remove_waiter(key);
+                    return Err(EAGAIN);
+                }
+
+                let expected_park_val = FUTEX_PARK_EXPECTED.load(Ordering::SeqCst);
+                let park_ret = self.park(expected_park_val, timeout.as_ref());
+                futex_remove_waiter(key);
+                let actual_park_val = park_ret?;
+                FUTEX_PARK_EXPECTED.store(actual_park_val, Ordering::SeqCst);
                 Ok(0)
             }
             FUTEX_WAIT_BITSET => {
@@ -319,16 +443,64 @@ pub trait Handler {
                     return Err(ENOTSUP);
                 }
 
-                while uaddr.load(Ordering::Relaxed) == val {
-                    expected_park_val = self.park(expected_park_val, timespec)?;
+                if uaddr.load(Ordering::SeqCst) != val {
+                    return Err(EAGAIN);
                 }
+
+                futex_add_waiter(key)?;
+
+                if uaddr.load(Ordering::SeqCst) != val {
+                    futex_remove_waiter(key);
+                    return Err(EAGAIN);
+                }
+
+                let expected_park_val = FUTEX_PARK_EXPECTED.load(Ordering::SeqCst);
+                let park_ret = self.park(expected_park_val, timespec);
+                futex_remove_waiter(key);
+                let actual_park_val = park_ret?;
+                FUTEX_PARK_EXPECTED.store(actual_park_val, Ordering::SeqCst);
                 Ok(0)
             }
-            FUTEX_WAKE => {
-                // TODO: return the number of woken threads: https://github.com/enarx/enarx/issues/2181
-                // This needs extensive book keeping on the futexes and normally nobody cares about the result.
-                // For now return 1 or 0 in the error case.
-                self.unpark().map(|_| 1).or(Ok(0))
+            FUTEX_WAKE | FUTEX_WAKE_BITSET => {
+                if futex_op == FUTEX_WAKE_BITSET && val3 == 0 {
+                    self.debug_futex_wake(
+                        uaddr as *const AtomicU32,
+                        futex_op,
+                        val,
+                        val3,
+                        uaddr.load(Ordering::SeqCst),
+                        0,
+                        0,
+                    );
+                    return Ok(0);
+                }
+
+                let waiters = futex_waiter_count(key);
+                if waiters == 0 || val == 0 {
+                    self.debug_futex_wake(
+                        uaddr as *const AtomicU32,
+                        futex_op,
+                        val,
+                        val3,
+                        uaddr.load(Ordering::SeqCst),
+                        waiters,
+                        0,
+                    );
+                    return Ok(0);
+                }
+
+                let wake_count = core::cmp::min(waiters, val as usize);
+                self.debug_futex_wake(
+                    uaddr as *const AtomicU32,
+                    futex_op,
+                    val,
+                    val3,
+                    uaddr.load(Ordering::SeqCst),
+                    waiters,
+                    wake_count,
+                );
+                self.unpark()?;
+                Ok(wake_count as c_long)
             }
             _ => Err(ENOTSUP),
         }
@@ -686,6 +858,12 @@ pub trait Handler {
         })?
     }
 
+    /// Executes [`sched_yield`](https://man7.org/linux/man-pages/man2/sched_yield.2.html) syscall akin to [`libc::sched_yield`].
+    #[inline]
+    fn sched_yield(&mut self) -> Result<()> {
+        self.execute(syscall::SchedYield)?
+    }
+
     /// Executes [`sync`](https://man7.org/linux/man-pages/man2/sync.2.html) syscall akin to [`libc::sync`].
     #[inline]
     fn sync(&mut self) -> Result<()> {
@@ -841,7 +1019,8 @@ pub trait Handler {
             }
             (SYS_futex, [uaddr, futex_op, val, timeout, _uaddr2, val3]) => {
                 let futex_op = i32::try_from(futex_op).map_err(|_| EINVAL)?;
-                let timeout = match futex_op & (!FUTEX_PRIVATE_FLAG) {
+                let base_op = futex_op & !(FUTEX_PRIVATE_FLAG | FUTEX_CLOCK_REALTIME);
+                let timeout = match base_op {
                     FUTEX_WAIT | FUTEX_WAIT_BITSET => {
                         if timeout != 0 {
                             platform.validate(timeout).map(Some)?
@@ -849,7 +1028,7 @@ pub trait Handler {
                             None
                         }
                     }
-                    FUTEX_WAKE => None,
+                    FUTEX_WAKE | FUTEX_WAKE_BITSET => None,
                     _ => return Err(ENOTSUP),
                 };
 
@@ -1023,6 +1202,7 @@ pub trait Handler {
                 self.rt_sigprocmask(how as _, set, oldset, sigsetsize as _)
                     .map(|_| [0, 0])
             }
+            (SYS_sched_yield, ..) => self.sched_yield().map(|_| [0, 0]),
             (SYS_sendto, [sockfd, buf, len, flags, dest_addr, addrlen]) => {
                 let buf = platform.validate_slice(buf, len)?;
                 if dest_addr == 0 {
