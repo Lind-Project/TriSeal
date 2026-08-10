@@ -2,7 +2,7 @@
 
 use super::{deref, deref_aligned};
 use crate::libc::{
-    self, epoll_event, pollfd, sigset_t, sockaddr_storage, socklen_t, timespec, EFAULT,
+    self, epoll_event, pollfd, sigset_t, sockaddr_storage, socklen_t, stat, timespec, EFAULT,
 };
 use crate::{item, Result, NULL};
 
@@ -202,6 +202,20 @@ pub(super) unsafe fn execute(call: &mut item::Syscall, data: &mut [u8]) -> Resul
 
         item::Syscall {
             num,
+            argv: [pathname_offset, pathname_len, mode, ..],
+            ret: [ret, ..],
+        } if *num == libc::SYS_access as _ => {
+            let pathname = deref::<u8>(data, *pathname_offset, *pathname_len)?;
+            Syscall {
+                num: libc::SYS_access,
+                argv: [pathname as _, *mode],
+                ret: [ret],
+            }
+            .execute()
+        }
+
+        item::Syscall {
+            num,
             argv: [sockfd, addr_offset, addrlen, ..],
             ret: [ret, ..],
         } if *num == libc::SYS_bind as _ => {
@@ -209,6 +223,20 @@ pub(super) unsafe fn execute(call: &mut item::Syscall, data: &mut [u8]) -> Resul
             Syscall {
                 num: libc::SYS_bind,
                 argv: [*sockfd, addr as _, *addrlen],
+                ret: [ret],
+            }
+            .execute()
+        }
+
+        item::Syscall {
+            num,
+            argv: [pathname_offset, pathname_len, mode, ..],
+            ret: [ret, ..],
+        } if *num == libc::SYS_chmod as _ => {
+            let pathname = deref::<u8>(data, *pathname_offset, *pathname_len)?;
+            Syscall {
+                num: libc::SYS_chmod,
+                argv: [pathname as _, *mode],
                 ret: [ret],
             }
             .execute()
@@ -412,6 +440,78 @@ pub(super) unsafe fn execute(call: &mut item::Syscall, data: &mut [u8]) -> Resul
             ret: [ret],
         }
         .execute(),
+
+        item::Syscall {
+            num,
+            argv: [fd, statbuf_offset, ..],
+            ret: [ret, ..],
+        } if *num == libc::SYS_fstat as _ => {
+            let statbuf = deref_aligned::<stat>(data, *statbuf_offset, 1)?;
+            Syscall {
+                num: libc::SYS_fstat,
+                argv: [*fd, statbuf as _],
+                ret: [ret],
+            }
+            .execute()
+        }
+
+        item::Syscall {
+            num,
+            argv: [buf_offset, size, ..],
+            ret: [ret, ..],
+        } if *num == libc::SYS_getcwd as _ => {
+            let buf = deref::<u8>(data, *buf_offset, *size)?;
+            Syscall {
+                num: libc::SYS_getcwd,
+                argv: [buf as _, *size],
+                ret: [ret],
+            }
+            .execute()
+        }
+
+        item::Syscall {
+            num,
+            argv: [pathname_offset, pathname_len, statbuf_offset, ..],
+            ret: [ret, ..],
+        } if *num == libc::SYS_lstat as _ => {
+            let pathname = deref::<u8>(data, *pathname_offset, *pathname_len)?;
+            let statbuf = deref_aligned::<stat>(data, *statbuf_offset, 1)?;
+            Syscall {
+                num: libc::SYS_lstat,
+                argv: [pathname as _, statbuf as _],
+                ret: [ret],
+            }
+            .execute()
+        }
+
+        item::Syscall {
+            num,
+            argv: [pathname_offset, pathname_len, statbuf_offset, ..],
+            ret: [ret, ..],
+        } if *num == libc::SYS_stat as _ => {
+            let pathname = deref::<u8>(data, *pathname_offset, *pathname_len)?;
+            let statbuf = deref_aligned::<stat>(data, *statbuf_offset, 1)?;
+            Syscall {
+                num: libc::SYS_stat,
+                argv: [pathname as _, statbuf as _],
+                ret: [ret],
+            }
+            .execute()
+        }
+
+        item::Syscall {
+            num,
+            argv: [pathname_offset, pathname_len, ..],
+            ret: [ret, ..],
+        } if *num == libc::SYS_unlink as _ => {
+            let pathname = deref::<u8>(data, *pathname_offset, *pathname_len)?;
+            Syscall {
+                num: libc::SYS_unlink,
+                argv: [pathname as _],
+                ret: [ret],
+            }
+            .execute()
+        }
 
         item::Syscall {
             num,

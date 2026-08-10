@@ -19,19 +19,19 @@ use crate::item::enarxcall::sgx;
 use crate::item::syscall::sigaction;
 use crate::libc::{
     clockid_t, epoll_event, gid_t, mode_t, off_t, pid_t, pollfd, sigset_t, stack_t, stat, timespec,
-    uid_t, utsname, CloneFlags, Ioctl, SYS_accept, SYS_accept4, SYS_arch_prctl, SYS_bind, SYS_brk,
-    SYS_clock_getres, SYS_clock_gettime, SYS_clone, SYS_close, SYS_connect, SYS_dup, SYS_dup2,
-    SYS_dup3, SYS_epoll_create1, SYS_epoll_ctl, SYS_epoll_pwait, SYS_epoll_wait, SYS_eventfd2,
-    SYS_exit, SYS_exit_group, SYS_fcntl, SYS_fstat, SYS_futex, SYS_getegid, SYS_geteuid,
-    SYS_getgid, SYS_getpid, SYS_getrandom, SYS_getsockname, SYS_getuid, SYS_ioctl, SYS_listen,
-    SYS_madvise, SYS_mmap, SYS_mprotect, SYS_mremap, SYS_munmap, SYS_nanosleep, SYS_open,
-    SYS_pipe2, SYS_poll, SYS_read, SYS_readlink, SYS_readv, SYS_recvfrom, SYS_rt_sigaction,
-    SYS_rt_sigprocmask, SYS_sched_yield, SYS_sendto, SYS_set_tid_address, SYS_setsockopt,
-    SYS_sigaltstack, SYS_socket, SYS_sync, SYS_uname, SYS_write, SYS_writev, CLOCK_MONOTONIC,
-    EAGAIN, EFAULT, EINVAL, ENOMEM, ENOSYS, ENOTSUP, FIONBIO, FIONREAD, FUTEX_CLOCK_REALTIME,
-    FUTEX_PRIVATE_FLAG, FUTEX_WAIT, FUTEX_WAIT_BITSET, FUTEX_WAKE, FUTEX_WAKE_BITSET,
-    MAP_ANONYMOUS, MAP_PRIVATE, MREMAP_DONTUNMAP, MREMAP_FIXED, MREMAP_MAYMOVE, PROT_EXEC,
-    PROT_READ, PROT_WRITE,
+    uid_t, utsname, CloneFlags, Ioctl, SYS_accept, SYS_accept4, SYS_access, SYS_arch_prctl,
+    SYS_bind, SYS_brk, SYS_chmod, SYS_clock_getres, SYS_clock_gettime, SYS_clone, SYS_close,
+    SYS_connect, SYS_dup, SYS_dup2, SYS_dup3, SYS_epoll_create1, SYS_epoll_ctl, SYS_epoll_pwait,
+    SYS_epoll_wait, SYS_eventfd2, SYS_exit, SYS_exit_group, SYS_fcntl, SYS_fstat, SYS_futex,
+    SYS_getcwd, SYS_getegid, SYS_geteuid, SYS_getgid, SYS_getpid, SYS_getrandom, SYS_getsockname,
+    SYS_getuid, SYS_ioctl, SYS_listen, SYS_lstat, SYS_madvise, SYS_mmap, SYS_mprotect, SYS_mremap,
+    SYS_munmap, SYS_nanosleep, SYS_open, SYS_pipe2, SYS_poll, SYS_read, SYS_readlink, SYS_readv,
+    SYS_recvfrom, SYS_rt_sigaction, SYS_rt_sigprocmask, SYS_sched_yield, SYS_sendto,
+    SYS_set_tid_address, SYS_setsockopt, SYS_sigaltstack, SYS_socket, SYS_stat, SYS_sync,
+    SYS_uname, SYS_unlink, SYS_write, SYS_writev, CLOCK_MONOTONIC, EAGAIN, EFAULT, EINVAL, ENOMEM,
+    ENOSYS, ENOTSUP, FIONBIO, FIONREAD, FUTEX_CLOCK_REALTIME, FUTEX_PRIVATE_FLAG, FUTEX_WAIT,
+    FUTEX_WAIT_BITSET, FUTEX_WAKE, FUTEX_WAKE_BITSET, MAP_ANONYMOUS, MAP_PRIVATE, MREMAP_DONTUNMAP,
+    MREMAP_FIXED, MREMAP_MAYMOVE, PROT_EXEC, PROT_READ, PROT_WRITE,
 };
 use crate::{item, Result};
 
@@ -237,6 +237,14 @@ pub trait Handler {
     /// Executes [`arch_prctl`](https://man7.org/linux/man-pages/man2/arch_prctl.2.html).
     fn arch_prctl(&mut self, platform: &impl Platform, code: c_int, addr: c_ulong) -> Result<()>;
 
+    /// Executes [`access`](https://man7.org/linux/man-pages/man2/access.2.html) syscall akin to [`libc::access`].
+    ///
+    /// `pathname` argument must contain the trailing nul terminator byte.
+    #[inline]
+    fn access(&mut self, pathname: &[u8], mode: c_int) -> Result<c_int> {
+        self.execute(syscall::Access { pathname, mode })?
+    }
+
     /// Executes [`bind`](https://man7.org/linux/man-pages/man2/bind.2.html) syscall akin to [`libc::bind`].
     #[inline]
     fn bind<'a>(&mut self, sockfd: c_int, addr: impl Into<SockaddrInput<'a>>) -> Result<()> {
@@ -249,6 +257,14 @@ pub trait Handler {
         platform: &impl Platform,
         addr: Option<NonNull<c_void>>,
     ) -> Result<NonNull<c_void>>;
+
+    /// Executes [`chmod`](https://man7.org/linux/man-pages/man2/chmod.2.html) syscall akin to [`libc::chmod`].
+    ///
+    /// `pathname` argument must contain the trailing nul terminator byte.
+    #[inline]
+    fn chmod(&mut self, pathname: &[u8], mode: mode_t) -> Result<c_int> {
+        self.execute(syscall::Chmod { pathname, mode })?
+    }
 
     /// Executes [`clock_getres`](https://man7.org/linux/man-pages/man2/clock_getres.2.html) syscall akin to [`libc::clock_getres`].
     #[inline]
@@ -506,6 +522,15 @@ pub trait Handler {
         }
     }
 
+    /// Executes [`getcwd`](https://man7.org/linux/man-pages/man2/getcwd.2.html) syscall akin to [`libc::getcwd`].
+    ///
+    /// On success the return value is the length of the path *including* its nul terminator.
+    #[inline]
+    fn getcwd(&mut self, buf: &mut [u8]) -> Result<c_size_t> {
+        self.execute(syscall::Getcwd { buf })?
+            .unwrap_or_else(|| self.attacked())
+    }
+
     /// Executes [`getegid`](https://man7.org/linux/man-pages/man2/getegid.2.html) syscall akin to [`libc::getegid`].
     #[inline]
     fn getegid(&mut self) -> Result<gid_t> {
@@ -562,6 +587,14 @@ pub trait Handler {
     #[inline]
     fn listen(&mut self, sockfd: c_int, backlog: c_int) -> Result<()> {
         self.execute(syscall::Listen { sockfd, backlog })?
+    }
+
+    /// Executes [`lstat`](https://man7.org/linux/man-pages/man2/lstat.2.html) syscall akin to [`libc::lstat`].
+    ///
+    /// `pathname` argument must contain the trailing nul terminator byte.
+    #[inline]
+    fn lstat(&mut self, pathname: &[u8], statbuf: &mut stat) -> Result<()> {
+        self.execute(syscall::Lstat { pathname, statbuf })?
     }
 
     /// Executes [`madvise`](https://man7.org/linux/man-pages/man2/madvise.2.html) syscall akin to [`libc::madvise`].
@@ -864,6 +897,14 @@ pub trait Handler {
         self.execute(syscall::SchedYield)?
     }
 
+    /// Executes [`stat`](https://man7.org/linux/man-pages/man2/stat.2.html) syscall akin to [`libc::stat`].
+    ///
+    /// `pathname` argument must contain the trailing nul terminator byte.
+    #[inline]
+    fn stat(&mut self, pathname: &[u8], statbuf: &mut stat) -> Result<()> {
+        self.execute(syscall::Stat { pathname, statbuf })?
+    }
+
     /// Executes [`sync`](https://man7.org/linux/man-pages/man2/sync.2.html) syscall akin to [`libc::sync`].
     #[inline]
     fn sync(&mut self) -> Result<()> {
@@ -874,6 +915,14 @@ pub trait Handler {
     #[inline]
     fn uname(&mut self, buf: &mut utsname) -> Result<()> {
         self.execute(syscall::Uname { buf })?
+    }
+
+    /// Executes [`unlink`](https://man7.org/linux/man-pages/man2/unlink.2.html) syscall akin to [`libc::unlink`].
+    ///
+    /// `pathname` argument must contain the trailing nul terminator byte.
+    #[inline]
+    fn unlink(&mut self, pathname: &[u8]) -> Result<c_int> {
+        self.execute(syscall::Unlink { pathname })?
     }
 
     /// Executes [`write`](https://man7.org/linux/man-pages/man2/write.2.html) syscall akin to [`libc::write`].
@@ -937,9 +986,17 @@ pub trait Handler {
                 let addr = platform.validate_slice(addr, addrlen)?;
                 self.bind(sockfd as _, addr).map(|_| [0, 0])
             }
+            (SYS_access, [pathname, mode, ..]) => {
+                let pathname = platform.validate_str(pathname)?;
+                self.access(pathname, mode as _).map(|ret| [ret as _, 0])
+            }
             (SYS_brk, [addr, ..]) => self
                 .brk(platform, NonNull::new(addr as _))
                 .map(|ret| [ret.as_ptr() as _, 0]),
+            (SYS_chmod, [pathname, mode, ..]) => {
+                let pathname = platform.validate_str(pathname)?;
+                self.chmod(pathname, mode as _).map(|ret| [ret as _, 0])
+            }
             (SYS_clock_getres, [clockid, res, ..]) => {
                 let res = if res == 0 {
                     None
@@ -1037,6 +1094,10 @@ pub trait Handler {
                 self.futex(uaddr, futex_op as _, val as _, timeout, None, val3 as _)
                     .map(|ret| [ret as _, 0])
             }
+            (SYS_getcwd, [buf, size, ..]) => {
+                let buf = platform.validate_slice_mut(buf, size)?;
+                self.getcwd(buf).map(|ret| [ret, 0])
+            }
             (SYS_getegid, ..) => self.getegid().map(|ret| [ret as _, 0]),
             (SYS_geteuid, ..) => self.geteuid().map(|ret| [ret as _, 0]),
             (SYS_getgid, ..) => self.getgid().map(|ret| [ret as _, 0]),
@@ -1069,6 +1130,11 @@ pub trait Handler {
             }
             (SYS_listen, [sockfd, backlog, ..]) => {
                 self.listen(sockfd as _, backlog as _).map(|_| [0, 0])
+            }
+            (SYS_lstat, [pathname, statbuf, ..]) => {
+                let pathname = platform.validate_str(pathname)?;
+                let statbuf = platform.validate_mut(statbuf)?;
+                self.lstat(pathname, statbuf).map(|_| [0, 0])
             }
             (SYS_madvise, [addr, length, advice, ..]) => {
                 let addr = NonNull::new(addr as _).ok_or(EFAULT)?;
@@ -1242,10 +1308,19 @@ pub trait Handler {
             (SYS_socket, [domain, typ, protocol, ..]) => self
                 .socket(domain as _, typ as _, protocol as _)
                 .map(|ret| [ret as _, 0]),
+            (SYS_stat, [pathname, statbuf, ..]) => {
+                let pathname = platform.validate_str(pathname)?;
+                let statbuf = platform.validate_mut(statbuf)?;
+                self.stat(pathname, statbuf).map(|_| [0, 0])
+            }
             (SYS_sync, ..) => self.sync().map(|_| [0, 0]),
             (SYS_uname, [buf, ..]) => {
                 let buf = platform.validate_mut(buf)?;
                 self.uname(buf).map(|_| [0, 0])
+            }
+            (SYS_unlink, [pathname, ..]) => {
+                let pathname = platform.validate_str(pathname)?;
+                self.unlink(pathname).map(|ret| [ret as _, 0])
             }
             (SYS_write, [fd, buf, count, ..]) => {
                 let buf = platform.validate_slice(buf, count)?;
