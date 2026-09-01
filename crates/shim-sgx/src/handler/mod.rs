@@ -506,6 +506,14 @@ impl<'a> Handler<'a> {
                     if h.handle_page_fault(addr, error_code).is_ok() {
                         return;
                     }
+                    {
+                        use core::fmt::Write;
+                        let rip = h.ssa.gpr.rip;
+                        let _ = writeln!(
+                            h,
+                            "[shim] UNHANDLED page fault addr {addr:#x} errcd {error_code:#?} rip {rip:#x} -> panic"
+                        );
+                    }
                 }
                 // Page fault cannot be handled by the enclave without a block.
                 panic!();
@@ -1229,23 +1237,34 @@ impl<'a> Handler<'a> {
         // debugln!(self, "[{tid}] handle_page_fault: {addr:#x} {error_code:?}");
 
         // check for non-valid flags
+        //
+        // PROTECTION_VIOLATION|SGX is accepted here: it is what a thread sees
+        // when it touches a page whose EPCM permissions are mid-transition
+        // (another thread's mprotect EMODPR/EACCEPT/EMODPE window, or a
+        // concurrent first-touch commit). Those faults are resolved further
+        // down by serializing on the HEAP lock and retrying.
         if !error_code
             .difference(
                 PageFaultErrorCode::CAUSED_BY_WRITE
                     | PageFaultErrorCode::INSTRUCTION_FETCH
-                    | PageFaultErrorCode::USER_MODE,
+                    | PageFaultErrorCode::USER_MODE
+                    | PageFaultErrorCode::PROTECTION_VIOLATION
+                    | PageFaultErrorCode::SGX,
             )
             .is_empty()
         {
-            debugln!(
-                self,
-                "[{tid}] handle_page_fault: difference {:#?}",
-                error_code.difference(
-                    PageFaultErrorCode::CAUSED_BY_WRITE
-                        | PageFaultErrorCode::INSTRUCTION_FETCH
-                        | PageFaultErrorCode::USER_MODE,
-                )
-            );
+            {
+                use core::fmt::Write;
+                let _ = writeln!(
+                    self,
+                    "[shim {tid}] page fault REJECTED addr {addr:#x} difference {:#?}",
+                    error_code.difference(
+                        PageFaultErrorCode::CAUSED_BY_WRITE
+                            | PageFaultErrorCode::INSTRUCTION_FETCH
+                            | PageFaultErrorCode::USER_MODE,
+                    )
+                );
+            }
 
             return Err(());
         }
@@ -1262,49 +1281,110 @@ impl<'a> Handler<'a> {
 
         let access = match heap.contains(addr, length) {
             None => {
-                debugln!(
-                    self,
-                    "[{tid}] handle_page_fault: access empty {:#?}",
-                    Region::new(addr, addr + length),
-                );
+                {
+                    use core::fmt::Write;
+                    let _ = writeln!(
+                        self,
+                        "[shim {tid}] page fault: ledger access empty {:#?} errcd {error_code:#?}",
+                        Region::new(addr, addr + length),
+                    );
+                }
                 panic!();
             }
             Some(access) => {
-                // check for real page fault
-                if !access.contains(Access::READ)
-                    || (error_code.contains(PageFaultErrorCode::CAUSED_BY_WRITE)
-                        && !access.contains(Access::WRITE))
-                    || (error_code.contains(PageFaultErrorCode::INSTRUCTION_FETCH)
-                        && !access.contains(Access::READ | Access::EXECUTE))
+                let access_covers_fault = access.contains(Access::READ)
+                    && (!error_code.contains(PageFaultErrorCode::CAUSED_BY_WRITE)
+                        || access.contains(Access::WRITE))
+                    && (!error_code.contains(PageFaultErrorCode::INSTRUCTION_FETCH)
+                        || access.contains(Access::READ | Access::EXECUTE));
+
+                // Spurious EPCM permission fault: the page is already committed
+                // (MMAPPED) and the ledger says this access is allowed, yet the
+                // CPU reported an SGX protection violation. That happens when
+                // the access raced a permission transition on another thread.
+                // Holding HEAP (acquired above) guarantees the transition has
+                // completed, so simply retrying the instruction is safe. Do NOT
+                // fall through to the commit path: re-running mmap_host on a
+                // committed page would zero its contents.
+                if error_code.contains(PageFaultErrorCode::SGX)
+                    && access.contains(Access::MMAPPED)
+                    && access_covers_fault
                 {
-                    debugln!(
-                        self,
-                        "[{tid}] handle_page_fault: real page fault previous access {:#?}",
-                        Record {
-                            region: Region::new(addr, addr + length),
-                            access
-                        }
-                    );
+                    {
+                        use core::fmt::Write;
+                        let _ = writeln!(
+                            self,
+                            "[shim {tid}] spurious EPCM fault at {addr:#?} access {access:#?} errcd {error_code:#?}, repairing + retrying"
+                        );
+                    }
+                    // Repair the page's EPCM permissions before retrying: a
+                    // pending EMODPR (host restricts to R, enarx#1892) may
+                    // never have been EACCEPTed/EMODPE-extended for this page.
+                    // accept() fails benignly when no restrict is pending, so
+                    // its error is ignored; extend() raises EPCM perms back up
+                    // to what the ledger grants.
+                    let virt_addr = VirtAddr::new(addr.as_ptr() as u64);
+                    let page_addr = unsafe { PageAddr::from_start_address_unchecked(virt_addr) };
+                    let _ = Class::Regular
+                        .info(Flags::READ | Flags::RESTRICTED)
+                        .accept(page_addr);
+                    Class::Regular
+                        .info(flags_from_access(access))
+                        .extend(page_addr);
+                    return Ok(());
+                }
+
+                // check for real page fault
+                if !access_covers_fault {
+                    {
+                        use core::fmt::Write;
+                        let _ = writeln!(
+                            self,
+                            "[shim {tid}] REAL page fault errcd {error_code:#?} previous access {:#?}",
+                            Record {
+                                region: Region::new(addr, addr + length),
+                                access
+                            }
+                        );
+                    }
                     panic!();
                 }
                 access
             }
         };
 
+        // Batch-commit up to 64 pages per fault instead of exactly one. Every
+        // mmap of /dev/sgx_enclave backing creates its own VMA (device
+        // mappings never merge), so single-page demand paging accumulates one
+        // VMA per 4 KiB and large workloads hit vm.max_map_count, making
+        // mmap_host fail with ENOMEM (observed at ~1M VMAs / ~4 GiB touched).
+        // Batching only extends over pages the ledger grants the identical
+        // access to and which are not yet committed, so this is eager commit
+        // of pages that were already mapped lazily - never a semantic change.
+        let length = match heap.record_at(addr) {
+            Some((region, raccess)) if raccess == access && !access.contains(Access::MMAPPED) => {
+                Offset::from_items((region.end - addr).items().min(64))
+            }
+            _ => length,
+        };
+
         if heap.mmap(Some(addr), length, access | Access::MMAPPED) != Some(addr) {
-            debugln!(
-                self,
-                "[{tid}] handle_page_fault: MMAPPED heap is inconsistent"
-            );
+            {
+                use core::fmt::Write;
+                let _ = writeln!(
+                    self,
+                    "[shim {tid}] page fault: MMAPPED heap is inconsistent at {addr:#?}"
+                );
+            }
             panic!();
         }
 
         if let Err(e) = self.mmap_host(addr.into_nonnull(), length.bytes(), PROT_READ | PROT_WRITE)
         {
-            debugln!(
-                self,
-                "[{tid}] handle_page_fault: ERROR mmap_host() = {e:#?}"
-            );
+            {
+                use core::fmt::Write;
+                let _ = writeln!(self, "[shim {tid}] page fault: ERROR mmap_host() = {e:#?}");
+            }
             panic!();
         }
 
@@ -1321,10 +1401,13 @@ impl<'a> Handler<'a> {
                 length.bytes() as c_size_t,
                 libc_from_access(access),
             ) {
-                debugln!(
-                    self,
-                    "[{tid}] handle_page_fault: ERROR mprotect_unlocked() = {e:#?}"
-                );
+                {
+                    use core::fmt::Write;
+                    let _ = writeln!(
+                        self,
+                        "[shim {tid}] page fault: ERROR mprotect_unlocked() = {e:#?}"
+                    );
+                }
                 panic!();
             }
         }
