@@ -94,6 +94,16 @@ impl Heap {
         self.ledger.contains(addr, length)
     }
 
+    /// Return the region and access of the ledger record containing `addr`.
+    pub fn record_at(&self, addr: Address<usize, Page>) -> Option<(Region, Access)> {
+        let probe = Region::new(addr, addr + Offset::from_items(1));
+        self.ledger
+            .records()
+            .iter()
+            .find(|r| r.region.intersection(probe).is_some())
+            .map(|r| (r.region, r.access))
+    }
+
     /// Return the maximum `brk` address reached.
     pub fn brk_max(&self) -> Address<usize, Page> {
         self.brk_region.end
