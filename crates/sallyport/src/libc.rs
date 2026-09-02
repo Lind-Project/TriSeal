@@ -288,6 +288,7 @@ pub const SYS_eventfd2: c_long = 290;
 pub const SYS_exit: c_long = 60;
 pub const SYS_exit_group: c_long = 231;
 pub const SYS_fcntl: c_long = 72;
+pub const SYS_lseek: c_long = 8;
 pub const SYS_fstat: c_long = 5;
 pub const SYS_futex: c_long = 202;
 pub const SYS_getcwd: c_long = 79;

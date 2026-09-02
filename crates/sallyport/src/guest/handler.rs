@@ -24,9 +24,9 @@ use crate::libc::{
     SYS_connect, SYS_dup, SYS_dup2, SYS_dup3, SYS_epoll_create1, SYS_epoll_ctl, SYS_epoll_pwait,
     SYS_epoll_wait, SYS_eventfd2, SYS_exit, SYS_exit_group, SYS_fcntl, SYS_fstat, SYS_futex,
     SYS_getcwd, SYS_getegid, SYS_geteuid, SYS_getgid, SYS_getpid, SYS_getrandom, SYS_getsockname,
-    SYS_getuid, SYS_ioctl, SYS_listen, SYS_lstat, SYS_madvise, SYS_mmap, SYS_mprotect, SYS_mremap,
-    SYS_munmap, SYS_nanosleep, SYS_open, SYS_pipe2, SYS_poll, SYS_read, SYS_readlink, SYS_readv,
-    SYS_recvfrom, SYS_rt_sigaction, SYS_rt_sigprocmask, SYS_sched_yield, SYS_sendto,
+    SYS_getuid, SYS_ioctl, SYS_listen, SYS_lseek, SYS_lstat, SYS_madvise, SYS_mmap, SYS_mprotect,
+    SYS_mremap, SYS_munmap, SYS_nanosleep, SYS_open, SYS_pipe2, SYS_poll, SYS_read, SYS_readlink,
+    SYS_readv, SYS_recvfrom, SYS_rt_sigaction, SYS_rt_sigprocmask, SYS_sched_yield, SYS_sendto,
     SYS_set_tid_address, SYS_setsockopt, SYS_sigaltstack, SYS_socket, SYS_stat, SYS_sync,
     SYS_uname, SYS_unlink, SYS_write, SYS_writev, CLOCK_MONOTONIC, EAGAIN, EFAULT, EINVAL, ENOMEM,
     ENOSYS, ENOTSUP, FIONBIO, FIONREAD, FUTEX_CLOCK_REALTIME, FUTEX_PRIVATE_FLAG, FUTEX_WAIT,
@@ -397,6 +397,12 @@ pub trait Handler {
     #[inline]
     fn fcntl(&mut self, fd: c_int, cmd: c_int, arg: c_int) -> Result<c_int> {
         self.execute(syscall::Fcntl { fd, cmd, arg })?
+    }
+
+    /// Executes [`lseek`](https://man7.org/linux/man-pages/man2/lseek.2.html) syscall akin to [`libc::lseek`].
+    #[inline]
+    fn lseek(&mut self, fd: c_int, offset: i64, whence: c_int) -> Result<usize> {
+        self.execute(syscall::Lseek { fd, offset, whence })?
     }
 
     /// Executes [`fstat`](https://man7.org/linux/man-pages/man2/fstat.2.html) syscall akin to [`libc::fstat`].
@@ -1069,6 +1075,9 @@ pub trait Handler {
             (SYS_exit_group, [status, ..]) => self.exit_group(status as _).map(|_| self.attacked()),
             (SYS_fcntl, [fd, cmd, arg, ..]) => self
                 .fcntl(fd as _, cmd as _, arg as _)
+                .map(|ret| [ret as _, 0]),
+            (SYS_lseek, [fd, offset, whence, ..]) => self
+                .lseek(fd as _, offset as _, whence as _)
                 .map(|ret| [ret as _, 0]),
             (SYS_fstat, [fd, statbuf, ..]) => {
                 let statbuf = platform.validate_mut(statbuf)?;
