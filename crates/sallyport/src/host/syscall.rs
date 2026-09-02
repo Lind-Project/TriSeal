@@ -443,6 +443,17 @@ pub(super) unsafe fn execute(call: &mut item::Syscall, data: &mut [u8]) -> Resul
 
         item::Syscall {
             num,
+            argv: [fd, offset, whence, ..],
+            ret: [ret, ..],
+        } if *num == libc::SYS_lseek as _ => Syscall {
+            num: libc::SYS_lseek,
+            argv: [*fd, *offset, *whence],
+            ret: [ret],
+        }
+        .execute(),
+
+        item::Syscall {
+            num,
             argv: [fd, statbuf_offset, ..],
             ret: [ret, ..],
         } if *num == libc::SYS_fstat as _ => {
