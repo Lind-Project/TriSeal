@@ -23,15 +23,16 @@ use crate::libc::{
     SYS_bind, SYS_brk, SYS_chmod, SYS_clock_getres, SYS_clock_gettime, SYS_clone, SYS_close,
     SYS_connect, SYS_dup, SYS_dup2, SYS_dup3, SYS_epoll_create1, SYS_epoll_ctl, SYS_epoll_pwait,
     SYS_epoll_wait, SYS_eventfd2, SYS_exit, SYS_exit_group, SYS_fcntl, SYS_fstat, SYS_futex,
-    SYS_getcwd, SYS_getegid, SYS_geteuid, SYS_getgid, SYS_getpid, SYS_getrandom, SYS_getsockname,
-    SYS_getuid, SYS_ioctl, SYS_listen, SYS_lseek, SYS_lstat, SYS_madvise, SYS_mmap, SYS_mprotect,
-    SYS_mremap, SYS_munmap, SYS_nanosleep, SYS_open, SYS_pipe2, SYS_poll, SYS_read, SYS_readlink,
-    SYS_readv, SYS_recvfrom, SYS_rt_sigaction, SYS_rt_sigprocmask, SYS_sched_yield, SYS_sendto,
-    SYS_set_tid_address, SYS_setsockopt, SYS_sigaltstack, SYS_socket, SYS_stat, SYS_sync,
-    SYS_uname, SYS_unlink, SYS_write, SYS_writev, CLOCK_MONOTONIC, EAGAIN, EFAULT, EINVAL, ENOMEM,
-    ENOSYS, ENOTSUP, FIONBIO, FIONREAD, FUTEX_CLOCK_REALTIME, FUTEX_PRIVATE_FLAG, FUTEX_WAIT,
-    FUTEX_WAIT_BITSET, FUTEX_WAKE, FUTEX_WAKE_BITSET, MAP_ANONYMOUS, MAP_PRIVATE, MREMAP_DONTUNMAP,
-    MREMAP_FIXED, MREMAP_MAYMOVE, PROT_EXEC, PROT_READ, PROT_WRITE,
+    SYS_getcwd, SYS_getdents64, SYS_getegid, SYS_geteuid, SYS_getgid, SYS_getpid, SYS_getrandom,
+    SYS_getsockname, SYS_getuid, SYS_ioctl, SYS_listen, SYS_lseek, SYS_lstat, SYS_madvise,
+    SYS_mmap, SYS_mprotect, SYS_mremap, SYS_munmap, SYS_nanosleep, SYS_open, SYS_pipe2, SYS_poll,
+    SYS_read, SYS_readlink, SYS_readv, SYS_recvfrom, SYS_rt_sigaction, SYS_rt_sigprocmask,
+    SYS_sched_yield, SYS_sendto, SYS_set_tid_address, SYS_setsockopt, SYS_sigaltstack, SYS_socket,
+    SYS_stat, SYS_sync, SYS_uname, SYS_unlink, SYS_write, SYS_writev, CLOCK_MONOTONIC, EAGAIN,
+    EFAULT, EINVAL, ENOMEM, ENOSYS, ENOTSUP, FIONBIO, FIONREAD, FUTEX_CLOCK_REALTIME,
+    FUTEX_PRIVATE_FLAG, FUTEX_WAIT, FUTEX_WAIT_BITSET, FUTEX_WAKE, FUTEX_WAKE_BITSET,
+    MAP_ANONYMOUS, MAP_PRIVATE, MREMAP_DONTUNMAP, MREMAP_FIXED, MREMAP_MAYMOVE, PROT_EXEC,
+    PROT_READ, PROT_WRITE,
 };
 use crate::{item, Result};
 
@@ -746,6 +747,13 @@ pub trait Handler {
             .unwrap_or_else(|| self.attacked())
     }
 
+    /// Executes [`getdents64`](https://man7.org/linux/man-pages/man2/getdents64.2.html) syscall akin to [`libc::syscall(SYS_getdents64)`].
+    #[inline]
+    fn getdents64(&mut self, fd: c_int, buf: &mut [u8]) -> Result<c_size_t> {
+        self.execute(syscall::Getdents64 { fd, buf })?
+            .unwrap_or_else(|| self.attacked())
+    }
+
     /// Executes [`readlink`](https://man7.org/linux/man-pages/man2/readlink.2.html) syscall akin to [`libc::readlink`].
     ///
     /// `pathname` argument must contain the trailing nul terminator byte.
@@ -1225,6 +1233,10 @@ pub trait Handler {
             (SYS_read, [fd, buf, count, ..]) => {
                 let buf = platform.validate_slice_mut(buf, count)?;
                 self.read(fd as _, buf).map(|ret| [ret, 0])
+            }
+            (SYS_getdents64, [fd, buf, count, ..]) => {
+                let buf = platform.validate_slice_mut(buf, count)?;
+                self.getdents64(fd as _, buf).map(|ret| [ret, 0])
             }
             (SYS_readlink, [pathname, buf, bufsiz, ..]) => {
                 let pathname = platform.validate_str(pathname)?;
