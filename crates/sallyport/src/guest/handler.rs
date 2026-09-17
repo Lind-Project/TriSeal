@@ -19,18 +19,20 @@ use crate::item::enarxcall::sgx;
 use crate::item::syscall::sigaction;
 use crate::libc::{
     clockid_t, epoll_event, gid_t, mode_t, off_t, pid_t, pollfd, sigset_t, stack_t, stat, timespec,
-    uid_t, utsname, CloneFlags, Ioctl, SYS_accept, SYS_accept4, SYS_arch_prctl, SYS_bind, SYS_brk,
-    SYS_clock_getres, SYS_clock_gettime, SYS_clone, SYS_close, SYS_connect, SYS_dup, SYS_dup2,
-    SYS_dup3, SYS_epoll_create1, SYS_epoll_ctl, SYS_epoll_pwait, SYS_epoll_wait, SYS_eventfd2,
-    SYS_exit, SYS_exit_group, SYS_fcntl, SYS_fstat, SYS_futex, SYS_getegid, SYS_geteuid,
-    SYS_getgid, SYS_getpid, SYS_getrandom, SYS_getsockname, SYS_getuid, SYS_ioctl, SYS_listen,
-    SYS_madvise, SYS_mmap, SYS_mprotect, SYS_mremap, SYS_munmap, SYS_nanosleep, SYS_open,
-    SYS_pipe2, SYS_poll, SYS_read, SYS_readlink, SYS_readv, SYS_recvfrom, SYS_rt_sigaction,
-    SYS_rt_sigprocmask, SYS_sendto, SYS_set_tid_address, SYS_setsockopt, SYS_sigaltstack,
-    SYS_socket, SYS_sync, SYS_uname, SYS_write, SYS_writev, CLOCK_MONOTONIC, EFAULT, EINVAL,
-    ENOSYS, ENOTSUP, FIONBIO, FIONREAD, FUTEX_PRIVATE_FLAG, FUTEX_WAIT, FUTEX_WAIT_BITSET,
-    FUTEX_WAKE, MAP_ANONYMOUS, MAP_PRIVATE, MREMAP_DONTUNMAP, MREMAP_FIXED, MREMAP_MAYMOVE,
-    PROT_EXEC, PROT_READ, PROT_WRITE,
+    uid_t, utsname, CloneFlags, Ioctl, SYS_accept, SYS_accept4, SYS_access, SYS_arch_prctl,
+    SYS_bind, SYS_brk, SYS_chmod, SYS_clock_getres, SYS_clock_gettime, SYS_clone, SYS_close,
+    SYS_connect, SYS_dup, SYS_dup2, SYS_dup3, SYS_epoll_create1, SYS_epoll_ctl, SYS_epoll_pwait,
+    SYS_epoll_wait, SYS_eventfd2, SYS_exit, SYS_exit_group, SYS_fcntl, SYS_fstat, SYS_futex,
+    SYS_getcwd, SYS_getdents64, SYS_getegid, SYS_geteuid, SYS_getgid, SYS_getpid, SYS_getrandom,
+    SYS_getsockname, SYS_getuid, SYS_ioctl, SYS_listen, SYS_lseek, SYS_lstat, SYS_madvise,
+    SYS_mmap, SYS_mprotect, SYS_mremap, SYS_munmap, SYS_nanosleep, SYS_open, SYS_pipe2, SYS_poll,
+    SYS_read, SYS_readlink, SYS_readv, SYS_recvfrom, SYS_rt_sigaction, SYS_rt_sigprocmask,
+    SYS_sched_yield, SYS_sendto, SYS_set_tid_address, SYS_setsockopt, SYS_sigaltstack, SYS_socket,
+    SYS_stat, SYS_sync, SYS_uname, SYS_unlink, SYS_write, SYS_writev, CLOCK_MONOTONIC, EAGAIN,
+    EFAULT, EINVAL, ENOMEM, ENOSYS, ENOTSUP, FIONBIO, FIONREAD, FUTEX_CLOCK_REALTIME,
+    FUTEX_PRIVATE_FLAG, FUTEX_WAIT, FUTEX_WAIT_BITSET, FUTEX_WAKE, FUTEX_WAKE_BITSET,
+    MAP_ANONYMOUS, MAP_PRIVATE, MREMAP_DONTUNMAP, MREMAP_FIXED, MREMAP_MAYMOVE, PROT_EXEC,
+    PROT_READ, PROT_WRITE,
 };
 use crate::{item, Result};
 
@@ -39,13 +41,123 @@ use core::ffi::{c_int, c_long, c_size_t, c_uint, c_ulong, c_void};
 use core::mem::size_of;
 use core::ptr::NonNull;
 use core::slice;
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicUsize, Ordering};
+
+const FUTEX_WAITER_BUCKETS: usize = 128;
+
+struct FutexBucket {
+    key: AtomicUsize,
+    waiters: AtomicUsize,
+}
+
+impl FutexBucket {
+    const fn new() -> Self {
+        Self {
+            key: AtomicUsize::new(0),
+            waiters: AtomicUsize::new(0),
+        }
+    }
+}
+
+struct FutexTableGuard;
+
+impl Drop for FutexTableGuard {
+    fn drop(&mut self) {
+        FUTEX_TABLE_LOCK.store(false, Ordering::Release);
+    }
+}
+
+static FUTEX_TABLE_LOCK: AtomicBool = AtomicBool::new(false);
+static FUTEX_PARK_EXPECTED: AtomicI32 = AtomicI32::new(0);
+static FUTEX_WAITERS: [FutexBucket; FUTEX_WAITER_BUCKETS] =
+    [const { FutexBucket::new() }; FUTEX_WAITER_BUCKETS];
+
+fn futex_lock_table() -> FutexTableGuard {
+    while FUTEX_TABLE_LOCK
+        .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+        .is_err()
+    {
+        core::hint::spin_loop();
+    }
+
+    FutexTableGuard
+}
+
+fn futex_key(uaddr: &AtomicU32) -> usize {
+    uaddr as *const AtomicU32 as usize
+}
+
+fn futex_add_waiter(key: usize) -> Result<()> {
+    let _guard = futex_lock_table();
+
+    for bucket in FUTEX_WAITERS.iter() {
+        if bucket.key.load(Ordering::Relaxed) == key {
+            let waiters = bucket.waiters.load(Ordering::Relaxed);
+            bucket
+                .waiters
+                .store(waiters.checked_add(1).ok_or(ENOMEM)?, Ordering::Relaxed);
+            return Ok(());
+        }
+    }
+
+    for bucket in FUTEX_WAITERS.iter() {
+        if bucket.key.load(Ordering::Relaxed) == 0 {
+            bucket.waiters.store(1, Ordering::Relaxed);
+            bucket.key.store(key, Ordering::Relaxed);
+            return Ok(());
+        }
+    }
+
+    Err(ENOMEM)
+}
+
+fn futex_remove_waiter(key: usize) {
+    let _guard = futex_lock_table();
+
+    for bucket in FUTEX_WAITERS.iter() {
+        if bucket.key.load(Ordering::Relaxed) == key {
+            let waiters = bucket.waiters.load(Ordering::Relaxed);
+            if waiters <= 1 {
+                bucket.waiters.store(0, Ordering::Relaxed);
+                bucket.key.store(0, Ordering::Relaxed);
+            } else {
+                bucket.waiters.store(waiters - 1, Ordering::Relaxed);
+            }
+            return;
+        }
+    }
+}
+
+fn futex_waiter_count(key: usize) -> usize {
+    let _guard = futex_lock_table();
+
+    for bucket in FUTEX_WAITERS.iter() {
+        if bucket.key.load(Ordering::Relaxed) == key {
+            return bucket.waiters.load(Ordering::Relaxed);
+        }
+    }
+
+    0
+}
 
 /// Guest request handler.
 pub trait Handler {
     /// Suspend guest execution and pass control to host.
     /// This function will return when the host passes control back to the guest.
     fn sally(&mut self) -> Result<()>;
+
+    /// Optional debug hook for futex wake decisions.
+    fn debug_futex_wake(
+        &mut self,
+        _uaddr: *const AtomicU32,
+        _futex_op: c_int,
+        _val: u32,
+        _val3: u32,
+        _current: u32,
+        _waiters: usize,
+        _wake_count: usize,
+    ) {
+    }
 
     /// Returns an immutable borrow of the sallyport block.
     fn block(&self) -> &[usize];
@@ -126,6 +238,14 @@ pub trait Handler {
     /// Executes [`arch_prctl`](https://man7.org/linux/man-pages/man2/arch_prctl.2.html).
     fn arch_prctl(&mut self, platform: &impl Platform, code: c_int, addr: c_ulong) -> Result<()>;
 
+    /// Executes [`access`](https://man7.org/linux/man-pages/man2/access.2.html) syscall akin to [`libc::access`].
+    ///
+    /// `pathname` argument must contain the trailing nul terminator byte.
+    #[inline]
+    fn access(&mut self, pathname: &[u8], mode: c_int) -> Result<c_int> {
+        self.execute(syscall::Access { pathname, mode })?
+    }
+
     /// Executes [`bind`](https://man7.org/linux/man-pages/man2/bind.2.html) syscall akin to [`libc::bind`].
     #[inline]
     fn bind<'a>(&mut self, sockfd: c_int, addr: impl Into<SockaddrInput<'a>>) -> Result<()> {
@@ -138,6 +258,14 @@ pub trait Handler {
         platform: &impl Platform,
         addr: Option<NonNull<c_void>>,
     ) -> Result<NonNull<c_void>>;
+
+    /// Executes [`chmod`](https://man7.org/linux/man-pages/man2/chmod.2.html) syscall akin to [`libc::chmod`].
+    ///
+    /// `pathname` argument must contain the trailing nul terminator byte.
+    #[inline]
+    fn chmod(&mut self, pathname: &[u8], mode: mode_t) -> Result<c_int> {
+        self.execute(syscall::Chmod { pathname, mode })?
+    }
 
     /// Executes [`clock_getres`](https://man7.org/linux/man-pages/man2/clock_getres.2.html) syscall akin to [`libc::clock_getres`].
     #[inline]
@@ -272,6 +400,12 @@ pub trait Handler {
         self.execute(syscall::Fcntl { fd, cmd, arg })?
     }
 
+    /// Executes [`lseek`](https://man7.org/linux/man-pages/man2/lseek.2.html) syscall akin to [`libc::lseek`].
+    #[inline]
+    fn lseek(&mut self, fd: c_int, offset: i64, whence: c_int) -> Result<usize> {
+        self.execute(syscall::Lseek { fd, offset, whence })?
+    }
+
     /// Executes [`fstat`](https://man7.org/linux/man-pages/man2/fstat.2.html) syscall akin to [`libc::fstat`].
     #[inline]
     fn fstat(&mut self, fd: c_int, statbuf: &mut stat) -> Result<()> {
@@ -288,10 +422,9 @@ pub trait Handler {
         _uaddr2: Option<&mut AtomicU32>,
         val3: u32,
     ) -> Result<c_long> {
-        // The `FUTEX_PRIVATE_FLAG` is only interesting,
-        // if the shims would support multiple processes, which they don't.
-        let futex_op = futex_op & !FUTEX_PRIVATE_FLAG;
-        let mut expected_park_val: c_int = 0;
+        // These are flags layered on top of the base futex operation.
+        let futex_op = futex_op & !(FUTEX_PRIVATE_FLAG | FUTEX_CLOCK_REALTIME);
+        let key = futex_key(uaddr);
 
         match futex_op {
             FUTEX_WAIT => {
@@ -309,9 +442,23 @@ pub trait Handler {
                     timeout.tv_nsec %= 1_000_000_000;
                     timeout
                 });
-                while uaddr.load(Ordering::Relaxed) == val {
-                    expected_park_val = self.park(expected_park_val, timeout.as_ref())?;
+
+                if uaddr.load(Ordering::SeqCst) != val {
+                    return Err(EAGAIN);
                 }
+
+                futex_add_waiter(key)?;
+
+                if uaddr.load(Ordering::SeqCst) != val {
+                    futex_remove_waiter(key);
+                    return Err(EAGAIN);
+                }
+
+                let expected_park_val = FUTEX_PARK_EXPECTED.load(Ordering::SeqCst);
+                let park_ret = self.park(expected_park_val, timeout.as_ref());
+                futex_remove_waiter(key);
+                let actual_park_val = park_ret?;
+                FUTEX_PARK_EXPECTED.store(actual_park_val, Ordering::SeqCst);
                 Ok(0)
             }
             FUTEX_WAIT_BITSET => {
@@ -319,19 +466,76 @@ pub trait Handler {
                     return Err(ENOTSUP);
                 }
 
-                while uaddr.load(Ordering::Relaxed) == val {
-                    expected_park_val = self.park(expected_park_val, timespec)?;
+                if uaddr.load(Ordering::SeqCst) != val {
+                    return Err(EAGAIN);
                 }
+
+                futex_add_waiter(key)?;
+
+                if uaddr.load(Ordering::SeqCst) != val {
+                    futex_remove_waiter(key);
+                    return Err(EAGAIN);
+                }
+
+                let expected_park_val = FUTEX_PARK_EXPECTED.load(Ordering::SeqCst);
+                let park_ret = self.park(expected_park_val, timespec);
+                futex_remove_waiter(key);
+                let actual_park_val = park_ret?;
+                FUTEX_PARK_EXPECTED.store(actual_park_val, Ordering::SeqCst);
                 Ok(0)
             }
-            FUTEX_WAKE => {
-                // TODO: return the number of woken threads: https://github.com/enarx/enarx/issues/2181
-                // This needs extensive book keeping on the futexes and normally nobody cares about the result.
-                // For now return 1 or 0 in the error case.
-                self.unpark().map(|_| 1).or(Ok(0))
+            FUTEX_WAKE | FUTEX_WAKE_BITSET => {
+                if futex_op == FUTEX_WAKE_BITSET && val3 == 0 {
+                    self.debug_futex_wake(
+                        uaddr as *const AtomicU32,
+                        futex_op,
+                        val,
+                        val3,
+                        uaddr.load(Ordering::SeqCst),
+                        0,
+                        0,
+                    );
+                    return Ok(0);
+                }
+
+                let waiters = futex_waiter_count(key);
+                if waiters == 0 || val == 0 {
+                    self.debug_futex_wake(
+                        uaddr as *const AtomicU32,
+                        futex_op,
+                        val,
+                        val3,
+                        uaddr.load(Ordering::SeqCst),
+                        waiters,
+                        0,
+                    );
+                    return Ok(0);
+                }
+
+                let wake_count = core::cmp::min(waiters, val as usize);
+                self.debug_futex_wake(
+                    uaddr as *const AtomicU32,
+                    futex_op,
+                    val,
+                    val3,
+                    uaddr.load(Ordering::SeqCst),
+                    waiters,
+                    wake_count,
+                );
+                self.unpark()?;
+                Ok(wake_count as c_long)
             }
             _ => Err(ENOTSUP),
         }
+    }
+
+    /// Executes [`getcwd`](https://man7.org/linux/man-pages/man2/getcwd.2.html) syscall akin to [`libc::getcwd`].
+    ///
+    /// On success the return value is the length of the path *including* its nul terminator.
+    #[inline]
+    fn getcwd(&mut self, buf: &mut [u8]) -> Result<c_size_t> {
+        self.execute(syscall::Getcwd { buf })?
+            .unwrap_or_else(|| self.attacked())
     }
 
     /// Executes [`getegid`](https://man7.org/linux/man-pages/man2/getegid.2.html) syscall akin to [`libc::getegid`].
@@ -390,6 +594,14 @@ pub trait Handler {
     #[inline]
     fn listen(&mut self, sockfd: c_int, backlog: c_int) -> Result<()> {
         self.execute(syscall::Listen { sockfd, backlog })?
+    }
+
+    /// Executes [`lstat`](https://man7.org/linux/man-pages/man2/lstat.2.html) syscall akin to [`libc::lstat`].
+    ///
+    /// `pathname` argument must contain the trailing nul terminator byte.
+    #[inline]
+    fn lstat(&mut self, pathname: &[u8], statbuf: &mut stat) -> Result<()> {
+        self.execute(syscall::Lstat { pathname, statbuf })?
     }
 
     /// Executes [`madvise`](https://man7.org/linux/man-pages/man2/madvise.2.html) syscall akin to [`libc::madvise`].
@@ -532,6 +744,13 @@ pub trait Handler {
     #[inline]
     fn read(&mut self, fd: c_int, buf: &mut [u8]) -> Result<c_size_t> {
         self.execute(syscall::Read { fd, buf })?
+            .unwrap_or_else(|| self.attacked())
+    }
+
+    /// Executes [`getdents64`](https://man7.org/linux/man-pages/man2/getdents64.2.html) syscall akin to [`libc::syscall(SYS_getdents64)`].
+    #[inline]
+    fn getdents64(&mut self, fd: c_int, buf: &mut [u8]) -> Result<c_size_t> {
+        self.execute(syscall::Getdents64 { fd, buf })?
             .unwrap_or_else(|| self.attacked())
     }
 
@@ -686,6 +905,20 @@ pub trait Handler {
         })?
     }
 
+    /// Executes [`sched_yield`](https://man7.org/linux/man-pages/man2/sched_yield.2.html) syscall akin to [`libc::sched_yield`].
+    #[inline]
+    fn sched_yield(&mut self) -> Result<()> {
+        self.execute(syscall::SchedYield)?
+    }
+
+    /// Executes [`stat`](https://man7.org/linux/man-pages/man2/stat.2.html) syscall akin to [`libc::stat`].
+    ///
+    /// `pathname` argument must contain the trailing nul terminator byte.
+    #[inline]
+    fn stat(&mut self, pathname: &[u8], statbuf: &mut stat) -> Result<()> {
+        self.execute(syscall::Stat { pathname, statbuf })?
+    }
+
     /// Executes [`sync`](https://man7.org/linux/man-pages/man2/sync.2.html) syscall akin to [`libc::sync`].
     #[inline]
     fn sync(&mut self) -> Result<()> {
@@ -696,6 +929,14 @@ pub trait Handler {
     #[inline]
     fn uname(&mut self, buf: &mut utsname) -> Result<()> {
         self.execute(syscall::Uname { buf })?
+    }
+
+    /// Executes [`unlink`](https://man7.org/linux/man-pages/man2/unlink.2.html) syscall akin to [`libc::unlink`].
+    ///
+    /// `pathname` argument must contain the trailing nul terminator byte.
+    #[inline]
+    fn unlink(&mut self, pathname: &[u8]) -> Result<c_int> {
+        self.execute(syscall::Unlink { pathname })?
     }
 
     /// Executes [`write`](https://man7.org/linux/man-pages/man2/write.2.html) syscall akin to [`libc::write`].
@@ -759,9 +1000,17 @@ pub trait Handler {
                 let addr = platform.validate_slice(addr, addrlen)?;
                 self.bind(sockfd as _, addr).map(|_| [0, 0])
             }
+            (SYS_access, [pathname, mode, ..]) => {
+                let pathname = platform.validate_str(pathname)?;
+                self.access(pathname, mode as _).map(|ret| [ret as _, 0])
+            }
             (SYS_brk, [addr, ..]) => self
                 .brk(platform, NonNull::new(addr as _))
                 .map(|ret| [ret.as_ptr() as _, 0]),
+            (SYS_chmod, [pathname, mode, ..]) => {
+                let pathname = platform.validate_str(pathname)?;
+                self.chmod(pathname, mode as _).map(|ret| [ret as _, 0])
+            }
             (SYS_clock_getres, [clockid, res, ..]) => {
                 let res = if res == 0 {
                     None
@@ -835,13 +1084,17 @@ pub trait Handler {
             (SYS_fcntl, [fd, cmd, arg, ..]) => self
                 .fcntl(fd as _, cmd as _, arg as _)
                 .map(|ret| [ret as _, 0]),
+            (SYS_lseek, [fd, offset, whence, ..]) => self
+                .lseek(fd as _, offset as _, whence as _)
+                .map(|ret| [ret as _, 0]),
             (SYS_fstat, [fd, statbuf, ..]) => {
                 let statbuf = platform.validate_mut(statbuf)?;
                 self.fstat(fd as _, statbuf).map(|_| [0, 0])
             }
             (SYS_futex, [uaddr, futex_op, val, timeout, _uaddr2, val3]) => {
                 let futex_op = i32::try_from(futex_op).map_err(|_| EINVAL)?;
-                let timeout = match futex_op & (!FUTEX_PRIVATE_FLAG) {
+                let base_op = futex_op & !(FUTEX_PRIVATE_FLAG | FUTEX_CLOCK_REALTIME);
+                let timeout = match base_op {
                     FUTEX_WAIT | FUTEX_WAIT_BITSET => {
                         if timeout != 0 {
                             platform.validate(timeout).map(Some)?
@@ -849,7 +1102,7 @@ pub trait Handler {
                             None
                         }
                     }
-                    FUTEX_WAKE => None,
+                    FUTEX_WAKE | FUTEX_WAKE_BITSET => None,
                     _ => return Err(ENOTSUP),
                 };
 
@@ -857,6 +1110,10 @@ pub trait Handler {
 
                 self.futex(uaddr, futex_op as _, val as _, timeout, None, val3 as _)
                     .map(|ret| [ret as _, 0])
+            }
+            (SYS_getcwd, [buf, size, ..]) => {
+                let buf = platform.validate_slice_mut(buf, size)?;
+                self.getcwd(buf).map(|ret| [ret, 0])
             }
             (SYS_getegid, ..) => self.getegid().map(|ret| [ret as _, 0]),
             (SYS_geteuid, ..) => self.geteuid().map(|ret| [ret as _, 0]),
@@ -890,6 +1147,11 @@ pub trait Handler {
             }
             (SYS_listen, [sockfd, backlog, ..]) => {
                 self.listen(sockfd as _, backlog as _).map(|_| [0, 0])
+            }
+            (SYS_lstat, [pathname, statbuf, ..]) => {
+                let pathname = platform.validate_str(pathname)?;
+                let statbuf = platform.validate_mut(statbuf)?;
+                self.lstat(pathname, statbuf).map(|_| [0, 0])
             }
             (SYS_madvise, [addr, length, advice, ..]) => {
                 let addr = NonNull::new(addr as _).ok_or(EFAULT)?;
@@ -972,6 +1234,10 @@ pub trait Handler {
                 let buf = platform.validate_slice_mut(buf, count)?;
                 self.read(fd as _, buf).map(|ret| [ret, 0])
             }
+            (SYS_getdents64, [fd, buf, count, ..]) => {
+                let buf = platform.validate_slice_mut(buf, count)?;
+                self.getdents64(fd as _, buf).map(|ret| [ret, 0])
+            }
             (SYS_readlink, [pathname, buf, bufsiz, ..]) => {
                 let pathname = platform.validate_str(pathname)?;
                 let buf = platform.validate_slice_mut(buf, bufsiz)?;
@@ -1023,6 +1289,7 @@ pub trait Handler {
                 self.rt_sigprocmask(how as _, set, oldset, sigsetsize as _)
                     .map(|_| [0, 0])
             }
+            (SYS_sched_yield, ..) => self.sched_yield().map(|_| [0, 0]),
             (SYS_sendto, [sockfd, buf, len, flags, dest_addr, addrlen]) => {
                 let buf = platform.validate_slice(buf, len)?;
                 if dest_addr == 0 {
@@ -1062,10 +1329,19 @@ pub trait Handler {
             (SYS_socket, [domain, typ, protocol, ..]) => self
                 .socket(domain as _, typ as _, protocol as _)
                 .map(|ret| [ret as _, 0]),
+            (SYS_stat, [pathname, statbuf, ..]) => {
+                let pathname = platform.validate_str(pathname)?;
+                let statbuf = platform.validate_mut(statbuf)?;
+                self.stat(pathname, statbuf).map(|_| [0, 0])
+            }
             (SYS_sync, ..) => self.sync().map(|_| [0, 0]),
             (SYS_uname, [buf, ..]) => {
                 let buf = platform.validate_mut(buf)?;
                 self.uname(buf).map(|_| [0, 0])
+            }
+            (SYS_unlink, [pathname, ..]) => {
+                let pathname = platform.validate_str(pathname)?;
+                self.unlink(pathname).map(|ret| [ret as _, 0])
             }
             (SYS_write, [fd, buf, count, ..]) => {
                 let buf = platform.validate_slice(buf, count)?;
