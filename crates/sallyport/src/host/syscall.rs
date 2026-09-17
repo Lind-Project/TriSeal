@@ -630,6 +630,20 @@ pub(super) unsafe fn execute(call: &mut item::Syscall, data: &mut [u8]) -> Resul
 
         item::Syscall {
             num,
+            argv: [fd, buf_offset, count, ..],
+            ret: [ret, ..],
+        } if *num == libc::SYS_getdents64 as _ => {
+            let buf = deref::<u8>(data, *buf_offset, *count)?;
+            Syscall {
+                num: libc::SYS_getdents64,
+                argv: [*fd, buf as _, *count],
+                ret: [ret],
+            }
+            .execute();
+        }
+
+        item::Syscall {
+            num,
             argv: [sockfd, buf_offset, len, flags, src_addr_offset, addrlen_offset],
             ret: [ret, ..],
         } if *num == libc::SYS_recvfrom as _ => {

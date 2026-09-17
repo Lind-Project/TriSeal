@@ -292,6 +292,7 @@ pub const SYS_lseek: c_long = 8;
 pub const SYS_fstat: c_long = 5;
 pub const SYS_futex: c_long = 202;
 pub const SYS_getcwd: c_long = 79;
+pub const SYS_getdents64: c_long = 217;
 pub const SYS_getegid: c_long = 108;
 pub const SYS_geteuid: c_long = 107;
 pub const SYS_getgid: c_long = 104;
