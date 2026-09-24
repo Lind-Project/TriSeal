@@ -25,7 +25,7 @@ use crate::libc::{
     SYS_epoll_wait, SYS_eventfd2, SYS_exit, SYS_exit_group, SYS_fcntl, SYS_fstat, SYS_futex,
     SYS_getcwd, SYS_getdents64, SYS_getegid, SYS_geteuid, SYS_getgid, SYS_getpid, SYS_getrandom,
     SYS_getsockname, SYS_getuid, SYS_ioctl, SYS_listen, SYS_lseek, SYS_lstat, SYS_madvise,
-    SYS_mmap, SYS_mprotect, SYS_mremap, SYS_munmap, SYS_nanosleep, SYS_open, SYS_pipe2, SYS_poll,
+    SYS_mmap, SYS_mprotect, SYS_mremap, SYS_munmap, SYS_nanosleep, SYS_open, SYS_pipe, SYS_pipe2, SYS_poll,
     SYS_read, SYS_readlink, SYS_readv, SYS_recvfrom, SYS_rt_sigaction, SYS_rt_sigprocmask,
     SYS_sched_yield, SYS_sendto, SYS_set_tid_address, SYS_setsockopt, SYS_sigaltstack, SYS_socket,
     SYS_stat, SYS_sync, SYS_uname, SYS_unlink, SYS_write, SYS_writev, CLOCK_MONOTONIC, EAGAIN,
@@ -728,7 +728,7 @@ pub trait Handler {
 
     /// Executes the pipe2 syscall.
     #[inline]
-    fn pipe2(&mut self, pipefd: *mut c_int, flags: c_int) -> Result<c_int> {
+    fn pipe2(&mut self, pipefd: &mut [c_int; 2], flags: c_int) -> Result<c_int> {
         // The return value is expected to be 0 on success.
         self.execute(syscall::Pipe2 { pipefd, flags })?
     }
@@ -1221,6 +1221,10 @@ pub trait Handler {
                 let mode = if mode == 0 { None } else { Some(mode as _) };
                 self.open(pathname, flags as _, mode)
                     .map(|ret| [ret as _, 0])
+            }
+            (SYS_pipe, [pipefd, ..]) => {
+                let pipefd = platform.validate_mut(pipefd)?;
+                self.pipe2(pipefd, 0).map(|ret| [ret as _, 0])
             }
             (SYS_pipe2, [pipefd, flags, ..]) => {
                 let pipefd = platform.validate_mut(pipefd)?;
