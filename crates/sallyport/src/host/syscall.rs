@@ -399,14 +399,17 @@ pub(super) unsafe fn execute(call: &mut item::Syscall, data: &mut [u8]) -> Resul
 
         item::Syscall {
             num,
-            argv: [fd1, fd2, flags, ..],
+            argv: [pipefd_offset, flags, ..],
             ret: [ret, ..],
-        } if *num == libc::SYS_pipe2 as _ => Syscall {
-            num: libc::SYS_pipe2,
-            argv: [**[fd1, fd2].as_mut_ptr(), *flags],
-            ret: [ret],
+        } if *num == libc::SYS_pipe2 as _ => {
+            let pipefd = deref_aligned::<core::ffi::c_int>(data, *pipefd_offset, 2)?;
+            Syscall {
+                num: libc::SYS_pipe2,
+                argv: [pipefd as _, *flags],
+                ret: [ret],
+            }
+            .execute()
         }
-        .execute(),
 
         item::Syscall {
             num,
