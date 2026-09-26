@@ -1,0 +1,24 @@
+# Gramine manifest shared by all benchmark binaries.
+# Build with: make APP=<name> (see Makefile).
+
+libos.entrypoint = "/app/{{ app }}"
+loader.log_level = "{{ log_level }}"
+loader.env.LD_LIBRARY_PATH = "/lib"
+
+fs.start_dir = "/app"
+fs.mounts = [
+  { path = "/lib", uri = "file:{{ gramine.runtimedir() }}" },
+  { path = "/app", uri = "file:app" },
+]
+
+sgx.debug = true
+sgx.enable_stats = {{ 'true' if env.get('STATS', '0') == '1' else 'false' }}
+sgx.edmm_enable = {{ 'true' if env.get('EDMM', '0') == '1' else 'false' }}
+sgx.enclave_size = "{{ env.get('ENCLAVE_SIZE', '1G') }}"
+sgx.max_threads = {{ env.get('MAX_THREADS', '8') }}
+
+sgx.trusted_files = [
+  "file:{{ gramine.libos }}",
+  "file:{{ gramine.runtimedir() }}/",
+  "file:app/",
+]
