@@ -5,7 +5,8 @@ use super::Alloc;
 use crate::guest::alloc::{Allocator, Collector};
 use crate::libc::{
     epoll_event, SYS_close, SYS_dup, SYS_dup2, SYS_dup3, SYS_epoll_create1, SYS_epoll_ctl,
-    SYS_eventfd2, SYS_exit, SYS_exit_group, SYS_listen, SYS_pipe2, SYS_socket, SYS_sync,
+    SYS_eventfd2, SYS_exit, SYS_exit_group, SYS_listen, SYS_sched_yield, SYS_socket,
+    SYS_sync,
 };
 use crate::Result;
 
@@ -199,26 +200,6 @@ unsafe impl PassthroughAlloc for Eventfd2 {
     }
 }
 
-pub struct Pipe2 {
-    pub pipefd: *mut c_int,
-    pub flags: c_int,
-}
-
-unsafe impl PassthroughAlloc for Pipe2 {
-    const NUM: c_long = SYS_pipe2;
-
-    type Argv = Argv<3>;
-    type Ret = c_int;
-
-    fn stage(self) -> Self::Argv {
-        Argv([
-            self.pipefd.wrapping_add(0) as _,
-            self.pipefd.wrapping_add(1) as _,
-            self.flags as _,
-        ])
-    }
-}
-
 pub struct Exit {
     pub status: c_int,
 }
@@ -279,6 +260,19 @@ unsafe impl PassthroughAlloc for Socket {
 
     fn stage(self) -> Self::Argv {
         Argv([self.domain as _, self.typ as _, self.protocol as _])
+    }
+}
+
+pub struct SchedYield;
+
+unsafe impl PassthroughAlloc for SchedYield {
+    const NUM: c_long = SYS_sched_yield;
+
+    type Argv = Argv<0>;
+    type Ret = ();
+
+    fn stage(self) -> Self::Argv {
+        Argv([])
     }
 }
 
