@@ -20,19 +20,19 @@ use crate::item::syscall::sigaction;
 use crate::libc::{
     clockid_t, epoll_event, gid_t, mode_t, off_t, pid_t, pollfd, sigset_t, stack_t, stat, timespec,
     uid_t, utsname, CloneFlags, Ioctl, SYS_accept, SYS_accept4, SYS_access, SYS_arch_prctl,
-    SYS_bind, SYS_brk, SYS_chmod, SYS_clock_getres, SYS_clock_gettime, SYS_clone, SYS_close,
-    SYS_connect, SYS_dup, SYS_dup2, SYS_dup3, SYS_epoll_create1, SYS_epoll_ctl, SYS_epoll_pwait,
-    SYS_epoll_wait, SYS_eventfd2, SYS_exit, SYS_exit_group, SYS_fcntl, SYS_fstat, SYS_futex,
-    SYS_getcwd, SYS_getdents64, SYS_getegid, SYS_geteuid, SYS_getgid, SYS_getpid, SYS_getrandom,
-    SYS_getsockname, SYS_getuid, SYS_ioctl, SYS_listen, SYS_lseek, SYS_lstat, SYS_madvise,
-    SYS_mmap, SYS_mprotect, SYS_mremap, SYS_munmap, SYS_nanosleep, SYS_open, SYS_pipe, SYS_pipe2, SYS_poll,
-    SYS_read, SYS_readlink, SYS_readv, SYS_recvfrom, SYS_rt_sigaction, SYS_rt_sigprocmask,
-    SYS_sched_yield, SYS_sendto, SYS_set_tid_address, SYS_setsockopt, SYS_sigaltstack, SYS_socket,
-    SYS_stat, SYS_sync, SYS_uname, SYS_unlink, SYS_write, SYS_writev, CLOCK_MONOTONIC, EAGAIN,
-    EFAULT, EINVAL, ENOMEM, ENOSYS, ENOTSUP, FIONBIO, FIONREAD, FUTEX_CLOCK_REALTIME,
-    FUTEX_PRIVATE_FLAG, FUTEX_WAIT, FUTEX_WAIT_BITSET, FUTEX_WAKE, FUTEX_WAKE_BITSET,
-    MAP_ANONYMOUS, MAP_PRIVATE, MREMAP_DONTUNMAP, MREMAP_FIXED, MREMAP_MAYMOVE, PROT_EXEC,
-    PROT_READ, PROT_WRITE,
+    SYS_bind, SYS_brk, SYS_chdir, SYS_chmod, SYS_clock_getres, SYS_clock_gettime, SYS_clone,
+    SYS_close, SYS_connect, SYS_dup, SYS_dup2, SYS_dup3, SYS_epoll_create1, SYS_epoll_ctl,
+    SYS_epoll_pwait, SYS_epoll_wait, SYS_eventfd2, SYS_exit, SYS_exit_group, SYS_fcntl, SYS_fstat,
+    SYS_futex, SYS_getcwd, SYS_getdents64, SYS_getegid, SYS_geteuid, SYS_getgid, SYS_getpid,
+    SYS_getrandom, SYS_getsockname, SYS_getuid, SYS_ioctl, SYS_listen, SYS_lseek, SYS_lstat,
+    SYS_madvise, SYS_mmap, SYS_mprotect, SYS_mremap, SYS_munmap, SYS_nanosleep, SYS_open, SYS_pipe,
+    SYS_pipe2, SYS_poll, SYS_read, SYS_readlink, SYS_readv, SYS_recvfrom, SYS_rt_sigaction,
+    SYS_rt_sigprocmask, SYS_sched_yield, SYS_sendto, SYS_set_tid_address, SYS_setsockopt,
+    SYS_sigaltstack, SYS_socket, SYS_stat, SYS_sync, SYS_uname, SYS_unlink, SYS_write, SYS_writev,
+    CLOCK_MONOTONIC, EAGAIN, EFAULT, EINVAL, ENOMEM, ENOSYS, ENOTSUP, FIONBIO, FIONREAD,
+    FUTEX_CLOCK_REALTIME, FUTEX_PRIVATE_FLAG, FUTEX_WAIT, FUTEX_WAIT_BITSET, FUTEX_WAKE,
+    FUTEX_WAKE_BITSET, MAP_ANONYMOUS, MAP_PRIVATE, MREMAP_DONTUNMAP, MREMAP_FIXED, MREMAP_MAYMOVE,
+    PROT_EXEC, PROT_READ, PROT_WRITE,
 };
 use crate::{item, Result};
 
@@ -931,6 +931,14 @@ pub trait Handler {
         self.execute(syscall::Uname { buf })?
     }
 
+    /// Executes [`chdir`](https://man7.org/linux/man-pages/man2/chdir.2.html) syscall akin to [`libc::chdir`].
+    ///
+    /// `pathname` argument must contain the trailing nul terminator byte.
+    #[inline]
+    fn chdir(&mut self, pathname: &[u8]) -> Result<c_int> {
+        self.execute(syscall::Chdir { pathname })?
+    }
+
     /// Executes [`unlink`](https://man7.org/linux/man-pages/man2/unlink.2.html) syscall akin to [`libc::unlink`].
     ///
     /// `pathname` argument must contain the trailing nul terminator byte.
@@ -1342,6 +1350,10 @@ pub trait Handler {
             (SYS_uname, [buf, ..]) => {
                 let buf = platform.validate_mut(buf)?;
                 self.uname(buf).map(|_| [0, 0])
+            }
+            (SYS_chdir, [pathname, ..]) => {
+                let pathname = platform.validate_str(pathname)?;
+                self.chdir(pathname).map(|ret| [ret as _, 0])
             }
             (SYS_unlink, [pathname, ..]) => {
                 let pathname = platform.validate_str(pathname)?;

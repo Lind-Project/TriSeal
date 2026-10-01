@@ -529,6 +529,20 @@ pub(super) unsafe fn execute(call: &mut item::Syscall, data: &mut [u8]) -> Resul
 
         item::Syscall {
             num,
+            argv: [pathname_offset, pathname_len, ..],
+            ret: [ret, ..],
+        } if *num == libc::SYS_chdir as _ => {
+            let pathname = deref::<u8>(data, *pathname_offset, *pathname_len)?;
+            Syscall {
+                num: libc::SYS_chdir,
+                argv: [pathname as _],
+                ret: [ret],
+            }
+            .execute()
+        }
+
+        item::Syscall {
+            num,
             argv: [sockfd, addr_offset, addrlen_offset, ..],
             ret: [ret, ..],
         } if *num == libc::SYS_getsockname as _ => {

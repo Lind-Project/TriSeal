@@ -272,6 +272,7 @@ pub const SYS_arch_prctl: c_long = 158;
 pub const SYS_bind: c_long = 49;
 pub const SYS_brk: c_long = 12;
 pub const SYS_chmod: c_long = 90;
+pub const SYS_chdir: c_long = 80;
 pub const SYS_clock_getres: c_long = 229;
 pub const SYS_clock_gettime: c_long = 228;
 pub const SYS_clone: c_long = 56;
