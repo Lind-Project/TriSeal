@@ -303,19 +303,19 @@ pub trait Handler {
 
     /// Executes [`dup`](https://man7.org/linux/man-pages/man2/dup.2.html) syscall akin to [`libc::dup`].
     #[inline]
-    fn dup(&mut self, oldfd: c_int) -> Result<()> {
+    fn dup(&mut self, oldfd: c_int) -> Result<c_int> {
         self.execute(syscall::Dup { oldfd })?
     }
 
     /// Executes [`dup2`](https://man7.org/linux/man-pages/man2/dup2.2.html) syscall akin to [`libc::dup2`].
     #[inline]
-    fn dup2(&mut self, oldfd: c_int, newfd: c_int) -> Result<()> {
+    fn dup2(&mut self, oldfd: c_int, newfd: c_int) -> Result<c_int> {
         self.execute(syscall::Dup2 { oldfd, newfd })?
     }
 
     /// Executes [`dup3`](https://man7.org/linux/man-pages/man2/dup3.2.html) syscall akin to [`libc::dup3`].
     #[inline]
-    fn dup3(&mut self, oldfd: c_int, newfd: c_int, flags: c_int) -> Result<()> {
+    fn dup3(&mut self, oldfd: c_int, newfd: c_int, flags: c_int) -> Result<c_int> {
         self.execute(syscall::Dup3 {
             oldfd,
             newfd,
@@ -1048,11 +1048,13 @@ pub trait Handler {
                 let addr = platform.validate_slice(addr, addrlen)?;
                 self.connect(sockfd as _, addr).map(|_| [0, 0])
             }
-            (SYS_dup, [oldfd, ..]) => self.dup(oldfd as _).map(|_| [0, 0]),
-            (SYS_dup2, [oldfd, newfd, ..]) => self.dup2(oldfd as _, newfd as _).map(|_| [0, 0]),
+            (SYS_dup, [oldfd, ..]) => self.dup(oldfd as _).map(|ret| [ret as _, 0]),
+            (SYS_dup2, [oldfd, newfd, ..]) => {
+                self.dup2(oldfd as _, newfd as _).map(|ret| [ret as _, 0])
+            }
             (SYS_dup3, [oldfd, newfd, flags, ..]) => self
                 .dup3(oldfd as _, newfd as _, flags as _)
-                .map(|_| [0, 0]),
+                .map(|ret| [ret as _, 0]),
             (SYS_epoll_create1, [flags, ..]) => {
                 self.epoll_create1(flags as _).map(|ret| [ret as _, 0])
             }
