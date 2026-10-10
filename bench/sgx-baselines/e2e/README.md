@@ -68,11 +68,45 @@ for the whole build, 3 runs each (governor powersave, turbo on):
 - File I/O is not the bottleneck on either system for this build: Gramine
   with encrypted files is within 2 s of plain files.
 
+## Fork/exec optimizations
+
+lind-wasm branch `triseal-forkexec-opt` (local only; worktree
+`~/sgx-bench/e2e/lw-opt` on lind-server-3, based on `enarx-7-13`) plus the
+imfs grate branch `triseal-forkexec-opt` (logical clock for file times),
+with TriSeal `open-futex` unchanged (64 GB enclave, ENCL_SIZE_BITS 36):
+
+| commit | change |
+|---|---|
+| f4a09e50c | zero anonymous MAP_FIXED mappings under SGX (cc1 -O2 fix) |
+| 17ef115a4 | compile out [instrument] tracing unless LIND_INSTRUMENT is set |
+| bae4eba96 | cache deserialized modules across exec (fstat-keyed LRU) |
+| 69ce71bd4 | port lind-wasm#1385 (no grate worker pools for non-grates) |
+| e6624a22a | drop the grate flag and old pool when a cage execs a non-grate |
+| a0e55a6a7 | zero only memory that can hold stale data; fix SGX munmap |
+| c2385ae13 | more instrument markers (spawn child, exec entry, exit, syscalls) |
+
+Lua build (results/e2e-opt-20261010-120634): 292 s -> **124 s**
+(123.7 / 123.0 / 125.2), with in-toto 294 s -> 125 s; Gramine is 138 s.
+The binaries are unchanged (same hashes). Exited cages are now reclaimed,
+so the 1 TB enclave is no longer needed. One fork+exec with a cached
+module is ~0.31 s (was ~0.83 s); `forkexec-profile.sh` shows where it goes.
+`src/cachetest.c` checks that rewriting an exec'd file is not hidden by
+the module cache; `abtest.sh` and `run-opt.sh` are the timing drivers.
+
+What is left per process is mostly SGX page management: every new cage
+commits fresh EPC pages on first touch (EAUG + EACCEPT) and every exit
+trims them again (the shim's munmap). Reusing committed pages across cages
+would need changes to the shim's ledger (mmledger) or a memory pool in
+the wasmtime/lind layer.
+
 ## Known TriSeal issues found here
 
-- Anonymous `MAP_FIXED` and `brk` shrink-then-grow return stale data
-  (fixed locally as above).
-- Exited cages are never reclaimed (worked around with a larger enclave).
+- Anonymous `MAP_FIXED`, `brk` shrink-then-grow and munmap left stale data,
+  and munmap returned ENOTSUP under SGX (fixed on triseal-forkexec-opt).
+- `pipe()` and stdout redirection do not work under the imfs grate (fds
+  0-2 always go to the host).
+- Exited cages were never reclaimed: every forked child got a grate worker
+  pool whose Stores kept its memory alive (fixed on triseal-forkexec-opt).
 - When a cage thread panics (for example on that ENOMEM), the keep hangs
   instead of exiting.
 - The keep's exit status does not reflect the workload's: a failed make
