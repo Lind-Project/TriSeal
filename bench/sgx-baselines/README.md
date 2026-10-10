@@ -10,7 +10,14 @@ occlum/       run-docker.sh (dev container) + build.sh (one Occlum instance)
 triseal/      build.sh: lind toolchain -> cwasm + Enarx.<app>.toml
 run.sh        wall-clock every system on one workload
 run-micro.sh  in-process microbenchmarks on every system
+file-compare.sh  file I/O per file system, with host syscalls per call
+e2e/          end-to-end Lua build with gcc (see e2e/README.md)
+rerun-all.sh  every benchmark, one results directory per category
 ```
+
+Results, including the latest full run on the optimized TriSeal
+(`rerun-20261010/`), are kept in a separate repository:
+https://github.com/Yaxuan-w/triseal-bench-data.
 
 ## Requirements
 

@@ -53,8 +53,7 @@ def strace(path):
         f = line.split()
         if len(f) >= 5 and re.match(r"^\d", f[0]):
             res[f[-1]] = int(f[3])
-    top = sorted(((v, k) for k, v in res.items() if k != "total"), reverse=True)[:8]
-    return {"host syscalls (total)": res.get("total", 0), **{f"  {k}": v for v, k in top}}
+    return {"host syscalls (total)": res.pop("total", 0), **{f"  {k}": v for k, v in res.items()}}
 
 rows = []
 for system, source, fn, stem in [
@@ -65,7 +64,14 @@ for system, source, fn, stem in [
 ]:
     b, p = (fn(f) if os.path.exists(f := os.path.join(out, stem.format(k))) else {}
             for k in ("build", "probe"))
-    keys = list(dict.fromkeys(list(b) + list(p)))
+    if fn is strace:
+        # The total, then the syscalls the build makes most.
+        top = sorted((k for k in b if k.startswith("  ")), key=lambda k: -b[k])[:10]
+        keys = ["host syscalls (total)"] + top
+        b = {k: b.get(k, 0) for k in keys}
+        p = {k: p.get(k, 0) for k in keys} if p else {}
+    else:
+        keys = list(dict.fromkeys(list(b) + list(p)))
     for k in keys:
         bv, pv = b.get(k), p.get(k)
         diff = bv - pv if bv is not None and pv is not None else ""

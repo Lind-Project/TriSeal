@@ -8,6 +8,9 @@
 #            process
 #   startup  launching the TEE and running `make --version` (PROBE=1)
 # Usage: e2e/coldwarm.sh [runs]   -> $OUT/coldwarm.csv and one log per run
+#   SYSTEMS  which of native, triseal, gramine to run (default all three)
+#   GTAG     suffix for the Gramine rows, e.g. "-src" when a Gramine built
+#            from source is first on PATH
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 E=${E:-$HOME/sgx-bench/e2e}
@@ -37,17 +40,27 @@ one() {
   esac
 }
 
+SYSTEMS=${SYSTEMS:-native triseal gramine}
+GTAG=${GTAG:-}
+has() { [[ " $SYSTEMS " == *" $1 "* ]]; }
 for i in $(seq "$N"); do
-  one native "$i" cold "$HERE/lua-native.sh" "$E/work-cw-native"
-  one native "$i" twice TWICE=1 "$HERE/lua-native.sh" "$E/work-cw-native"
-  one triseal "$i" cold "$HERE/lua-triseal.sh" "$E/work-cw-triseal"
-  one triseal "$i" twice TWICE=1 "$HERE/lua-triseal.sh" "$E/work-cw-triseal"
-  one triseal "$i" startup PROBE=1 "$HERE/lua-triseal.sh" "$E/work-cw-triseal"
-  for mode in encrypted allowed; do
-    one "gramine-$mode" "$i" cold MODE=$mode "$HERE/lua-gramine.sh" "$E/work-cw-gramine"
-    one "gramine-$mode" "$i" twice MODE=$mode TWICE=1 "$HERE/lua-gramine.sh" "$E/work-cw-gramine"
-    one "gramine-$mode" "$i" startup MODE=$mode PROBE=1 "$HERE/lua-gramine.sh" "$E/work-cw-gramine"
-  done
+  if has native; then
+    one native "$i" cold "$HERE/lua-native.sh" "$E/work-cw-native"
+    one native "$i" twice TWICE=1 "$HERE/lua-native.sh" "$E/work-cw-native"
+  fi
+  if has triseal; then
+    one triseal "$i" cold "$HERE/lua-triseal.sh" "$E/work-cw-triseal"
+    one triseal "$i" twice TWICE=1 "$HERE/lua-triseal.sh" "$E/work-cw-triseal"
+    one triseal "$i" startup PROBE=1 "$HERE/lua-triseal.sh" "$E/work-cw-triseal"
+  fi
+  if has gramine; then
+    for mode in encrypted allowed; do
+      g=gramine-$mode$GTAG
+      one "$g" "$i" cold MODE=$mode "$HERE/lua-gramine.sh" "$E/work-cw-gramine"
+      one "$g" "$i" twice MODE=$mode TWICE=1 "$HERE/lua-gramine.sh" "$E/work-cw-gramine"
+      one "$g" "$i" startup MODE=$mode PROBE=1 "$HERE/lua-gramine.sh" "$E/work-cw-gramine"
+    done
+  fi
 done
 
 python3 - "$CSV" <<'PY'
