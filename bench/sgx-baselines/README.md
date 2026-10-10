@@ -4,11 +4,12 @@ Runs the same C sources on TriSeal, Gramine and Occlum, all on SGX hardware,
 plus native and `gramine-direct` (no SGX) as reference points.
 
 ```
-src/       workloads; identical C source for every system
-gramine/   Makefile + one manifest template shared by all workloads
-occlum/    run-docker.sh (dev container) + build.sh (one Occlum instance)
-triseal/   build.sh: lind toolchain -> cwasm + Enarx.<app>.toml
-run.sh     wall-clock every system on one workload
+src/          workloads; identical C source for every system
+gramine/      Makefile + one manifest template shared by all workloads
+occlum/       run-docker.sh (dev container) + build.sh (one Occlum instance)
+triseal/      build.sh: lind toolchain -> cwasm + Enarx.<app>.toml
+run.sh        wall-clock every system on one workload
+run-micro.sh  in-process microbenchmarks on every system
 ```
 
 ## Requirements
@@ -36,6 +37,35 @@ Each system can also be run on its own: `make APP=forkexecv run` (or
 `direct`) in `gramine/`, the `enarx run` command printed by
 `triseal/build.sh`, and `occlum run /bin/<app>` inside `occlum/inst` in the
 container.
+
+## Microbenchmarks
+
+`src/microbench.c` times getpid, clock_gettime, pipes, file reads and
+writes, and fork/spawn/exec in loops inside one process, so enclave startup
+is excluded. It prints ns per operation.
+
+```sh
+(cd gramine && make APP=microbench)
+STATIC=1 triseal/build.sh microbench
+occlum/run-docker.sh ./build.sh microbench
+./run-micro.sh 100000 20        # syscall iterations, process iterations
+```
+
+Results go to `results/<timestamp>/`: `micro.csv`, one log per system, and
+`env.txt` (versions, CPU governor, enclave settings). File tests use an
+in-memory filesystem everywhere (Gramine `tmpfs`, Occlum `ramfs`, TriSeal
+imfs, `/dev/shm` natively) and wrap around after 1 MB.
+
+Known TriSeal problems that the harness works around:
+
+- `pipe()` returns ENOSYS. musl turns both `pipe()` and `pipe2(fd, 0)` into
+  `SYS_pipe`, which the sallyport guest handler does not forward (it only
+  handles `SYS_pipe2`). The pipe tests are reported as skipped.
+- Exited cages are not reclaimed. Exec fails with ENOMEM after about 11
+  fork+exec calls (about 34 forks without exec) in one keep, and the keep
+  then hangs instead of exiting. `run-micro.sh` gives each process test its
+  own keep and kills any run after `RUN_TIMEOUT` seconds. Use a small
+  process iteration count (5) for TriSeal.
 
 ## How the systems differ
 

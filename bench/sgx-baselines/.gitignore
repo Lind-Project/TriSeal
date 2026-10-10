@@ -4,3 +4,4 @@ gramine/*.manifest.sgx
 gramine/*.sig
 occlum/inst/
 triseal/build/
+results/

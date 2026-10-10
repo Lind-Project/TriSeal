@@ -4,11 +4,15 @@
 libos.entrypoint = "/app/{{ app }}"
 loader.log_level = "{{ log_level }}"
 loader.env.LD_LIBRARY_PATH = "/lib"
+# Benchmarks take their iteration counts on the command line.
+loader.insecure__use_cmdline_argv = true
 
 fs.start_dir = "/app"
 fs.mounts = [
   { path = "/lib", uri = "file:{{ gramine.runtimedir() }}" },
   { path = "/app", uri = "file:app" },
+  # In-enclave memory, like TriSeal's imfs and Occlum's ramfs /tmp.
+  { type = "tmpfs", path = "/tmp" },
 ]
 
 sgx.debug = true
