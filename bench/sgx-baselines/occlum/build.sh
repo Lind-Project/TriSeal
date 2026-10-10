@@ -17,7 +17,8 @@ cd inst
 # enclave memory like Gramine's tmpfs and TriSeal's imfs.
 jq '.resource_limits.user_space_size = "'${USER_SPACE:-600MB}'"
   | .resource_limits.max_num_of_threads = '${MAX_THREADS:-8}'
-  | .mount = ([.mount[] | select(.target != "/tmp")] + [{"target": "/tmp", "type": "ramfs"}])' \
+  | .mount = ([.mount[] | select(.target != "/tmp")] + [{"target": "/tmp", "type": "ramfs"}])
+  | .env.untrusted = ((.env.untrusted // []) + ["MB_FILE", "MB_BLOCKS", "MB_NOFILL"])' \
   Occlum.json > o.json && mv o.json Occlum.json
 occlum build >/dev/null
 echo "built $APP; run with: cd inst && occlum run /bin/$APP"

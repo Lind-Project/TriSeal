@@ -10,20 +10,22 @@
 # Build first:
 #   (cd gramine && make APP=microbench && make APP=handoff)
 #   STATIC=1 triseal/build.sh microbench && STATIC=1 triseal/build.sh handoff
-# IMFS_GRATE picks TriSeal's imfs grate (default triseal/grates/imfs-grate-opt.cwasm).
+# ENARX / IMFS_GRATE pick TriSeal's runtime and imfs grate. Occlum runs in
+# its container, so it gets times but no strace counts.
+#   occlum/run-docker.sh ./build.sh microbench   (ramfs /tmp, SEFS root)
 # Usage: ./file-compare.sh [config...]   -> results/filecmp-<timestamp>/
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 LIND=${LIND:-$HOME/lind-wasm}
-ENARX=${ENARX:-$HOME/enarx/target/release/enarx}
-IMFS_GRATE=${IMFS_GRATE:-$HERE/triseal/grates/imfs-grate-opt.cwasm}
+ENARX=${ENARX:-$HOME/sgx-bench/e2e/ts/TriSeal36/target/release/enarx}
+IMFS_GRATE=${IMFS_GRATE:-$HERE/triseal/grates/imfs-grate-clock.cwasm}
 BUILD=$HERE/triseal/build
-CONFIGS=${*:-native gramine-tmpfs gramine-allowed gramine-encrypted gramine-trusted triseal-imfs triseal-host}
+CONFIGS=${*:-native gramine-tmpfs gramine-allowed gramine-encrypted gramine-trusted triseal-imfs triseal-host occlum-ramfs occlum-sefs}
 TESTS="file_open_close file_stat file_lseek file_write_64 file_read_64 file_write_4k file_read_4k"
 TIMED=${TIMED:-100000}
 LOW=${LOW:-10000}
 HIGH=${HIGH:-100000}
-OUT=$HERE/results/filecmp-$(date +%Y%m%d-%H%M%S)
+OUT=${OUT:-$HERE/results/filecmp-$(date +%Y%m%d-%H%M%S)}
 mkdir -p "$OUT"
 
 # triseal <imfs|none> <module> <env lines> <args...>: run a keep, argv from
@@ -61,9 +63,18 @@ micro() {
     gramine-allowed)   gramine MB_FILE=/allowed/mb.dat -- microbench "$1" 1 "${@:2}" ;;
     gramine-encrypted) gramine MB_FILE=/enc/mb.dat -- microbench "$1" 1 "${@:2}" ;;
     gramine-trusted)   gramine MB_FILE=/app/trusted.dat MB_NOFILL=1 -- microbench "$1" 1 "${@:2}" ;;
-    triseal-imfs)      triseal imfs microbench $'MB_FILE = "/tmp/mb.dat"\n' "$1" 1 "${@:2}" ;;
+    triseal-imfs)      LIND_GRATE_WORKERS=1 triseal imfs microbench $'MB_FILE = "/tmp/mb.dat"\n' "$1" 1 "${@:2}" ;;
     triseal-host)      triseal none microbench $'MB_FILE = "/tmp/mb.dat"\n' "$1" 1 "${@:2}" ;;
+    occlum-ramfs)      occlum /tmp/mb.dat "$@" ;;
+    occlum-sefs)       occlum /root/mb.dat "$@" ;;
   esac
+}
+
+# occlum <file> <syscall iters> <test...>: ramfs is /tmp, SEFS is the root fs.
+occlum() {
+  local file=$1
+  shift
+  "$HERE/occlum/run-docker.sh" bash -c "cd inst && MB_FILE=$file occlum run /bin/microbench $1 1 ${*:2}"
 }
 
 # handoff <config>: parent writes a file, an exec'd child reads it back.
@@ -88,6 +99,7 @@ for cfg in $CONFIGS; do
 done
 
 for cfg in $CONFIGS; do
+  case $cfg in occlum-*) continue ;; esac
   for t in $TESTS; do
     for n in $LOW $HIGH; do
       echo "== strace $cfg $t $n" >&2
@@ -98,7 +110,7 @@ for cfg in $CONFIGS; do
 done
 
 python3 - "$OUT" "$LOW" "$HIGH" "$CONFIGS" "$TESTS" <<'PY'
-import os, re, sys
+import csv, os, re, sys
 out, low, high = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
 configs, tests = sys.argv[4].split(), sys.argv[5].split()
 ops = 1.1 * (high - low) / 10  # file tests run iters/10 timed + 10% warm-up
@@ -133,14 +145,20 @@ times = {cfg: mb(f"{out}/time.{cfg}.log") for cfg in configs}
 print("ns per call (host syscalls per call, from strace)\n")
 print("| test | " + " | ".join(configs) + " |\n|" + "---|" * (len(configs) + 1))
 details = []
+rows = []
 for t in tests:
     cells = []
     for cfg in configs:
         sc, top = per_op(cfg, t)
         cells.append(f"{times[cfg].get(t, 'fail')} ({sc})")
+        rows.append([cfg, t, times[cfg].get(t, "fail"), sc if sc != "?" else "", top])
         if top:
             details.append(f"{cfg} {t}: {top}")
     print(f"| {t} | " + " | ".join(cells) + " |")
+with open(f"{out}/filecmp.csv", "w", newline="") as f:
+    w = csv.writer(f)
+    w.writerow(["config", "test", "ns_per_op", "host_syscalls_per_op", "host_syscalls_by_name"])
+    w.writerows(rows)
 
 print("\nHost syscalls per call by name:\n")
 for d in details:

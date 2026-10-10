@@ -10,6 +10,10 @@
 #   sources (materials) and lua/luac (products) with a key made in the keep.
 #   PROBE=1 runs `make --version` with the same preloads instead, to measure
 #   keep startup plus preloading on their own.
+#   TWICE=1 builds two copies of the tree one after the other in the same
+#   keep (src/twobuild.c) and prints "@build <n> <dir> <s> <rc>" for each:
+#   the first build is cold, the second runs with the module cache and
+#   IMFS already warm.
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 E=${E:-$HOME/sgx-bench/e2e}
@@ -17,15 +21,24 @@ R=$E/root
 G=$R/usr/local/lib/gcc/x86_64-linux-gnu/15.2.0
 L=$R/usr/lib/x86_64-linux-gnu
 BIN=$R/usr/local/bin
-ENARX=${ENARX:-$HOME/enarx/target/release/enarx}
-IMFS_GRATE=${IMFS_GRATE:-$HERE/triseal/grates/imfs-grate-opt.cwasm}
+ENARX=${ENARX:-$HOME/sgx-bench/e2e/ts/TriSeal36/target/release/enarx}
+IMFS_GRATE=${IMFS_GRATE:-$HERE/triseal/grates/imfs-grate-clock.cwasm}
+TWOBUILD=$HERE/triseal/build/twobuild.cwasm
 CLI=${CLI:-$E/intoto/in-toto-cli.cwasm}
 W=${1:-$E/work-lua}
 
 rm -rf "$W"
 mkdir -p "$W"
-cp -r "$E/lua-5.5.1-src/." "$W/"
-SRC=$W/src
+if [ "${TWICE:-0}" = 1 ]; then
+  cp -r "$E/lua-5.5.1-src" "$W/a"
+  cp -r "$E/lua-5.5.1-src" "$W/b"
+  SRC=$W/a/src
+  SRCS=("$W/a/src" "$W/b/src")
+else
+  cp -r "$E/lua-5.5.1-src/." "$W/"
+  SRC=$W/src
+  SRCS=("$SRC")
+fi
 CC="$BIN/gcc -std=gnu99 -B$BIN/ -B$L/ -B$G/ -isystem $G/include -isystem $R/usr/include"
 
 # Headers the build reads, from the host compiler with the same search path.
@@ -41,11 +54,22 @@ files=(
   "$R"/lib/x86_64-linux-gnu/{libc.so.6,libm.so.6,libmvec.so.1}
   "$R"/lib64/ld-linux-x86-64.so.2
   $(headers)
-  "$SRC"/*.c "$SRC"/*.h "$SRC"/Makefile
 )
+for d in "${SRCS[@]}"; do
+  files+=("$d"/*.c "$d"/*.h "$d"/Makefile)
+done
 # Absolute tool paths: nothing is on PATH inside the keep.
-MAKE_CMD=("$BIN/make" -C "$SRC" all SYSCFLAGS=-DLUA_USE_POSIX "CC=$CC" "AR=$BIN/ar rcu" "RANLIB=$BIN/ranlib")
-DUMPS="$SRC/lua=$SRC/lua;$SRC/luac=$SRC/luac"
+MAKE_ARGS=(all SYSCFLAGS=-DLUA_USE_POSIX "CC=$CC" "AR=$BIN/ar rcu" "RANLIB=$BIN/ranlib")
+MAKE_CMD=("$BIN/make" -C "$SRC" "${MAKE_ARGS[@]}")
+DUMPS=""
+for d in "${SRCS[@]}"; do
+  DUMPS+="$d/lua=$d/lua;$d/luac=$d/luac;"
+done
+DUMPS=${DUMPS%;}
+if [ "${TWICE:-0}" = 1 ]; then
+  files=("$TWOBUILD" "${files[@]}")
+  MAKE_CMD=("$TWOBUILD" "$BIN/make" "${SRCS[@]}" -- "${MAKE_ARGS[@]}")
+fi
 
 if [ "${PROBE:-0}" = 1 ]; then
   MAKE_CMD=("$BIN/make" --version)
@@ -77,15 +101,18 @@ echo "preloads: ${#files[@]} files" >&2
 start=$(date +%s.%N)
 # One grate worker, as in lind-wasm-apps' in-toto/examples/gcc-imfs-sgx.sh.
 LIND_GRATE_WORKERS=1 ENARX_BACKEND=sgx ENARX_WASMCFGFILE="$W/build.toml" \
-  timeout 3600 "$ENARX" run "$IMFS_GRATE" >"$W/build.log" 2>&1
+  timeout 3600 ${TRACE:-} "$ENARX" run "$IMFS_GRATE" >"$W/build.log" 2>&1
 rc=$?
 end=$(date +%s.%N)
 echo "wall $(echo "$end - $start" | bc) rc=$rc"
 
 grep -E "error|Error|undefined" "$W/build.log" | grep -vE "^\[|failed to enable wasm cache" | head -5
-for t in lua luac; do
-  [ -x "$SRC/$t" ] && echo "$t: $(file -b "$SRC/$t" | cut -c1-60)" || echo "$t: missing"
+grep "^@build" "$W/build.log"
+for d in "${SRCS[@]}"; do
+  for t in lua luac; do
+    [ -x "$d/$t" ] && echo "$t: $(file -b "$d/$t" | cut -c1-60)" || echo "$t: missing"
+  done
+  [ -x "$d/lua" ] && "$d/lua" -e 'print(_VERSION, 2^10, string.format("%q", "ok"))'
 done
-[ -x "$SRC/lua" ] && "$SRC/lua" -e 'print(_VERSION, 2^10, string.format("%q", "ok"))'
 ls "$W"/build.*.link 2>/dev/null
 exit $rc

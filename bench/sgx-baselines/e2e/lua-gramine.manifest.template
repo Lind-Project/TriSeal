@@ -9,7 +9,7 @@ loader.env.LD_LIBRARY_PATH = "/lib:/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-g
 loader.env.PATH = "/usr/bin:/bin"
 loader.env.TMPDIR = "{{ work }}/tmp"
 
-fs.start_dir = "{{ work }}/src"
+fs.start_dir = "{{ work }}"
 fs.mounts = [
   { path = "/lib", uri = "file:{{ gramine.runtimedir() }}" },
   { path = "/usr/lib/x86_64-linux-gnu", uri = "file:/usr/lib/x86_64-linux-gnu" },
@@ -32,6 +32,7 @@ sgx.allowed_files = [ "file:{{ work }}/" ]
 
 sgx.debug = true
 sgx.edmm_enable = {{ edmm }}
+sgx.enable_stats = {{ stats }}
 sgx.enclave_size = "{{ enclave_size }}"
 sgx.max_threads = 8
 

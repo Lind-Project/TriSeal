@@ -5,23 +5,29 @@
 #   triseal/build.sh microbench
 #   occlum/run-docker.sh ./build.sh microbench
 # Usage: ./run-micro.sh [syscall_iters] [proc_iters] [system...]
-#   systems: native gramine-direct gramine-sgx triseal-sgx occlum-sgx (default: all)
+#   systems: native gramine-direct gramine-sgx triseal-sgx triseal-nogrates occlum-sgx
+#   (default: all). triseal-sgx runs under the imfs grate; triseal-nogrates
+#   runs microbench as the keep's workload (host files, working pipes).
+# ENARX / IMFS_GRATE pick TriSeal's runtime and imfs grate.
 # Writes results/<timestamp>/: micro.csv, one <system>.log each, env.txt.
 set -uo pipefail
 SYS_N=${1:-100000}
 PROC_N=${2:-20}
 shift 2 2>/dev/null || shift $#
-SYSTEMS=${*:-native gramine-direct gramine-sgx triseal-sgx occlum-sgx}
+SYSTEMS=${*:-native gramine-direct gramine-sgx triseal-sgx triseal-nogrates occlum-sgx}
 HERE=$(cd "$(dirname "$0")" && pwd)
 LIND=${LIND:-$HOME/lind-wasm}
-ENARX=${ENARX:-$HOME/enarx/target/release/enarx}
-OUT=$HERE/results/$(date +%Y%m%d-%H%M%S)
+ENARX=${ENARX:-$HOME/sgx-bench/e2e/ts/TriSeal36/target/release/enarx}
+IMFS_GRATE=${IMFS_GRATE:-$HERE/triseal/grates/imfs-grate-clock.cwasm}
+OUT=${OUT:-$HERE/results/$(date +%Y%m%d-%H%M%S)}
 mkdir -p "$OUT"
 echo "system,test,iters,total_ns,ns_per_op,skip_reason" >"$OUT/micro.csv"
 
 # TriSeal takes its argv from Enarx.toml: write one per invocation.
 triseal_toml() {
   local toml=$OUT/Enarx.$1.toml args
+  # "all" runs every test.
+  if [ "$1" = all ]; then shift; fi
   args=$(printf ', "%s"' "$SYS_N" "$PROC_N" "$@")
   sed "s|^args = .*|args = [\"/microbench\"$args]|" \
     "$HERE/triseal/build/Enarx.microbench.toml" >"$toml"
@@ -39,9 +45,9 @@ triseal_toml() {
   grep -E "^(enclave_size|edmm_enable|max_threads) " "$HERE/gramine/microbench.manifest"
   docker image inspect occlum/occlum:latest-ubuntu20.04 --format "occlum image {{.Id}} {{.Created}}"
   jq -c .resource_limits "$HERE/occlum/inst/Occlum.json"
-  echo "enarx $(stat -c %y "$ENARX") $(git -C "$(dirname "$ENARX")/../.." log -1 --format=%h)" \
-       "dirty=$(git -C "$(dirname "$ENARX")/../.." status --short -uno | wc -l)"
-  echo "lind-wasm $(git -C "$LIND" log -1 --format=%h)"
+  echo "enarx $ENARX $(stat -c %y "$ENARX")"
+  echo "lind-wasm runtime $(git -C "$HOME/sgx-bench/e2e/lw-opt" log -1 --format='%h %s' 2>/dev/null)"
+  echo "imfs grate $IMFS_GRATE $(stat -c %y "$IMFS_GRATE")"
 } >"$OUT/env.txt" 2>&1
 
 # run <system> <cmd...>: append the output to <system>.log and its @mb lines
@@ -71,14 +77,16 @@ for sys in $SYSTEMS; do
     gramine-sgx)
       run gramine-sgx bash -c "cd '$HERE/gramine' && gramine-sgx microbench $SYS_N $PROC_N" ;;
     triseal-sgx)
-      # Exited cages are not reclaimed (exec hits ENOMEM after ~34 cages),
-      # so every process test gets a keep of its own.
-      for group in "getpid clock_gettime pipe_rw pipe_pingpong file_write_64 file_write_4k file_read_64 file_read_4k" \
-                   fork_exit fork_exec spawn_exec; do
-        # shellcheck disable=SC2086
-        run triseal-sgx env ENARX_BACKEND=sgx ENARX_WASMCFGFILE="$(triseal_toml $group)" \
-          "$ENARX" run "$LIND/lindfs/grates/imfs-grate.cwasm"
-      done ;;
+      run triseal-sgx env LIND_GRATE_WORKERS=1 ENARX_BACKEND=sgx \
+        ENARX_WASMCFGFILE="$(triseal_toml all)" "$ENARX" run "$IMFS_GRATE" ;;
+    triseal-nogrates)
+      # No imfs: files are host files, and exec targets are not preloaded,
+      # so only the syscall, pipe and file tests run here.
+      printf 'args = ["%s", "%s", %s]\n\n[env]\nMB_FILE = "/tmp/microbench.dat"\n' "$SYS_N" "$PROC_N" \
+        '"getpid", "clock_gettime", "pipe_rw", "pipe_pingpong", "file_lseek", "file_open_close", "file_stat", "file_write_64", "file_write_4k", "file_read_64", "file_read_4k"' \
+        >"$OUT/Enarx.nogrates.toml"
+      run triseal-nogrates env ENARX_BACKEND=sgx ENARX_WASMCFGFILE="$OUT/Enarx.nogrates.toml" \
+        "$ENARX" run "$HERE/triseal/build/microbench.cwasm" ;;
     occlum-sgx)
       run occlum-sgx "$HERE/occlum/run-docker.sh" bash -c \
         "cd inst && occlum run /bin/microbench $SYS_N $PROC_N" ;;
