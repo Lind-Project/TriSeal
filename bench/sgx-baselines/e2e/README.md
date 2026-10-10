@@ -42,6 +42,32 @@ All three use the same headers, crt files and glibc 2.35 (staged under
      linear memory, so a 64 GB enclave runs out after about 12 cages and the
      keep hangs; the Lua build needs about 106.
 
+## Results
+
+lind-server-3, 2026-10-10 (results/e2e-20261010-045438), wall-clock seconds
+for the whole build, 3 runs each (governor powersave, turbo on):
+
+| configuration | mean | runs | vs native |
+|---|---|---|---|
+| native | 5.79 | 5.78 / 5.78 / 5.82 | 1x |
+| TriSeal (imfs, SGX) | 291.8 | 291.4 / 291.8 / 292.4 | 50x |
+| TriSeal + in-toto | 294.0 | 294.1 / 293.8 | 51x |
+| Gramine, encrypted files, 1G | 138.1 | 138.0 / 138.1 / 138.3 | 24x |
+| Gramine, allowed files, 1G | 136.4 | 136.1 / 136.5 / 136.5 | 24x |
+| Gramine, encrypted, EDMM | 152.3 | 152.2 / 152.4 / 152.3 | 26x |
+
+- Every run produced a working `lua`. TriSeal's is byte-identical (after
+  strip) to the native build. The in-toto run signs a link with 61 source
+  materials whose `lua`/`luac` product hashes match the dumped binaries.
+- TriSeal's keep startup plus preloading the 205 files is 28.1 s
+  (`PROBE=1`). The rest is dominated by process creation: one
+  fork+exec costs ~0.75 s for `as` (18 MB module) and ~3.5 s for `cc1`
+  (248 MB), because every exec reads the whole module out of IMFS through
+  3i and deserializes it again. The build execs cc1 33 times (~115 s).
+  Caching the deserialized module across execs is the obvious next step.
+- File I/O is not the bottleneck on either system for this build: Gramine
+  with encrypted files is within 2 s of plain files.
+
 ## Known TriSeal issues found here
 
 - Anonymous `MAP_FIXED` and `brk` shrink-then-grow return stale data
