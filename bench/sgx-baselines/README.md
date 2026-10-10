@@ -67,6 +67,27 @@ Known TriSeal problems that the harness works around:
   own keep and kills any run after `RUN_TIMEOUT` seconds. Use a small
   process iteration count (5) for TriSeal.
 
+### TriSeal file I/O breakdown
+
+`triseal/fileio-analysis.sh` reruns the file tests with `ENARX_SGX_STATS=1`
+for the deployed imfs grate, a release build of it, and no grate, and sweeps
+the file size with `MB_BLOCKS`. Findings on lind-server-3 (2026-10-10):
+
+- The imfs path never leaves the enclave (0 EEXITs per operation); all of
+  its cost is compute inside the keep.
+- `lindfs/grates/imfs-grate.cwasm` is a debug build of the Rust imfs grate.
+  A release build is 12-25x faster (`file_lseek` 14.9 -> 0.61 us,
+  `file_write_64` 19.3 -> 1.6 us, `file_write_4k` 97.9 -> 5.4 us).
+- imfs stores files as a linked list of 1 KB chunks and walks it from the
+  head on every read and write, so cost grows with the offset: release
+  `file_write_4k` takes 1.8 / 5.4 / 16.5 us at 64 KB / 1 MB / 4 MB files.
+- About 0.6 us per call is fixed grate dispatch (`file_lseek`: 3i lookup,
+  worker lease, Wasm call, fdtables, the imfs lock). Read and write also
+  allocate a buffer and copy twice (cage -> grate buffer -> chunk).
+- Without a grate, each file call is one ocall but costs two enclave exits
+  (~12 us): rawposix issues a `syscall` instruction, which traps as #UD
+  before the shim forwards it through sallyport.
+
 ## How the systems differ
 
 - **fork.** Gramine creates a new enclave for every child, so fork/exec cost

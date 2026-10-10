@@ -16,7 +16,8 @@
  * Build with -DNO_FORK where fork() is unavailable (Occlum); the fork tests
  * are then skipped and pipe_pingpong uses posix_spawn instead.
  *
- * Environment: MB_FILE overrides the scratch file (default /tmp/microbench.dat).
+ * Environment: MB_FILE overrides the scratch file (default /tmp/microbench.dat);
+ * MB_BLOCKS sets how many blocks the file tests use before wrapping (default 256).
  */
 #include <errno.h>
 #include <fcntl.h>
@@ -65,11 +66,12 @@ static int t_clock(long n)
 }
 
 /*
- * File tests wrap around every FILE_BLOCKS blocks (1 MB at 4 KB), so they
- * measure the per-call cost rather than how each in-memory filesystem copes
- * with a growing file (Occlum's ramfs lives in a 32 MB LibOS heap).
+ * File tests wrap around every file_blocks blocks (1 MB at 4 KB by default),
+ * so they measure the per-call cost rather than how each in-memory
+ * filesystem copes with a growing file (Occlum's ramfs lives in a 32 MB
+ * LibOS heap).
  */
-#define FILE_BLOCKS 256
+static long file_blocks = 256;
 
 static int file_write(long n, size_t sz)
 {
@@ -78,7 +80,7 @@ static int file_write(long n, size_t sz)
     return errno;
   int ret = 0;
   for (long i = 0; i < n; i++) {
-    if (i % FILE_BLOCKS == 0 && lseek(fd, 0, SEEK_SET) < 0) {
+    if (i % file_blocks == 0 && lseek(fd, 0, SEEK_SET) < 0) {
       ret = errno;
       break;
     }
@@ -94,7 +96,7 @@ static int file_write(long n, size_t sz)
 /* Times only the reads; the file is filled first with untimed writes. */
 static int file_read(long n, size_t sz, long long *elapsed)
 {
-  int ret = file_write(FILE_BLOCKS, sz);
+  int ret = file_write(file_blocks, sz);
   if (ret)
     return ret;
   int fd = open(file_path, O_RDONLY);
@@ -102,7 +104,7 @@ static int file_read(long n, size_t sz, long long *elapsed)
     return errno;
   long long s = now_ns();
   for (long i = 0; i < n; i++) {
-    if (i % FILE_BLOCKS == 0 && lseek(fd, 0, SEEK_SET) < 0) {
+    if (i % file_blocks == 0 && lseek(fd, 0, SEEK_SET) < 0) {
       ret = errno;
       break;
     }
@@ -118,6 +120,23 @@ static int file_read(long n, size_t sz, long long *elapsed)
 
 static int t_file_write_64(long n) { return file_write(n, 64); }
 static int t_file_write_4k(long n) { return file_write(n, 4096); }
+
+/* lseek on an open file: a file call that copies no data. */
+static int t_file_lseek(long n)
+{
+  int fd = open(file_path, O_CREAT | O_TRUNC | O_RDWR, 0600);
+  if (fd < 0)
+    return errno;
+  int ret = 0;
+  for (long i = 0; i < n; i++) {
+    if (lseek(fd, 0, SEEK_SET) < 0) {
+      ret = errno;
+      break;
+    }
+  }
+  close(fd);
+  return ret;
+}
 
 /* Single-process pipe: write then read one byte. */
 static int t_pipe_rw(long n)
@@ -262,6 +281,7 @@ static const struct test tests[] = {
   {"clock_gettime", t_clock, SYSCALL, 0},
   {"pipe_rw", t_pipe_rw, SYSCALL, 0},
   {"pipe_pingpong", t_pipe_pingpong, SYSCALL, 0},
+  {"file_lseek", t_file_lseek, FILEIO, 0},
   {"file_write_64", t_file_write_64, FILEIO, 0},
   {"file_write_4k", t_file_write_4k, FILEIO, 0},
   {"file_read_64", NULL, FILEIO, 64},
@@ -321,6 +341,8 @@ int main(int argc, char **argv)
 #endif
   if (getenv("MB_FILE"))
     file_path = getenv("MB_FILE");
+  if (getenv("MB_BLOCKS") && atol(getenv("MB_BLOCKS")) > 0)
+    file_blocks = atol(getenv("MB_BLOCKS"));
   long sys_iters = argc > 1 ? atol(argv[1]) : 100000;
   long proc_iters = argc > 2 ? atol(argv[2]) : 20;
   memset(buf, 'x', sizeof(buf));
