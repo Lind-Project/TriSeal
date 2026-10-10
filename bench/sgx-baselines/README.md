@@ -88,6 +88,33 @@ the file size with `MB_BLOCKS`. Findings on lind-server-3 (2026-10-10):
   (~12 us): rawposix issues a `syscall` instruction, which traps as #UD
   before the shim forwards it through sallyport.
 
+### File I/O: TriSeal vs. Gramine
+
+`file-compare.sh` runs the file tests (plus open/close and stat) on native,
+Gramine's tmpfs, allowed (plain host), encrypted and trusted files, TriSeal
+with the imfs grate (`IMFS_GRATE`, default the optimized
+`imfs-chunk-index` build) and TriSeal straight to host files. It reports ns
+per call and host syscalls per call, counted with `strace -f -c` for every
+system, and runs `src/handoff.c` to check whether a file written by one
+process can be read by an exec'd child, as cc1 -> as -> ld needs.
+
+Findings on lind-server-3 (2026-10-10, results/filecmp-20261010-013547):
+
+- Gramine's tmpfs is private to each process: the exec'd child cannot see
+  the parent's file. A multi-process compile on Gramine therefore needs
+  host-backed files (trusted inputs, encrypted or allowed intermediates),
+  which leave the enclave. TriSeal's imfs is shared by all cages and never
+  leaves the enclave (0 host syscalls for every file call).
+- Against those host-backed files TriSeal is faster: open+close 4.8 us vs
+  30.7 us (trusted) / 72 us (encrypted); 4 KB read 1.1 us vs 74 us
+  (trusted) / 38 us (encrypted); 4 KB write 1.2 us vs 78 us (encrypted).
+- Gramine is faster wherever it stays inside the enclave: tmpfs reads and
+  writes (0.1-0.2 us vs ~1.1 us), stat and lseek (0.1-0.3 us vs 3.6 / 0.6 us,
+  served from its in-enclave caches), and 64-byte encrypted writes and reads
+  (buffered, 0.14-0.16 us).
+- When TriSeal does go to the host, each call costs ~12 us (two enclave
+  exits) against ~4.2 us for Gramine's allowed files (one).
+
 ## How the systems differ
 
 - **fork.** Gramine creates a new enclave for every child, so fork/exec cost

@@ -6,6 +6,9 @@ loader.log_level = "{{ log_level }}"
 loader.env.LD_LIBRARY_PATH = "/lib"
 # Benchmarks take their iteration counts on the command line.
 loader.insecure__use_cmdline_argv = true
+loader.env.MB_FILE = { passthrough = true }
+loader.env.MB_NOFILL = { passthrough = true }
+loader.env.MB_BLOCKS = { passthrough = true }
 
 fs.start_dir = "/app"
 fs.mounts = [
@@ -13,7 +16,13 @@ fs.mounts = [
   { path = "/app", uri = "file:app" },
   # In-enclave memory, like TriSeal's imfs and Occlum's ramfs /tmp.
   { type = "tmpfs", path = "/tmp" },
+  # Host files: passed through as is, or encrypted by Gramine.
+  { path = "/allowed", uri = "file:allowed" },
+  { type = "encrypted", path = "/enc", uri = "file:enc", key_name = "bench" },
 ]
+
+# Benchmark-only key for /enc.
+fs.insecure__keys.bench = "00112233445566778899aabbccddeeff"
 
 sgx.debug = true
 sgx.enable_stats = {{ 'true' if env.get('STATS', '0') == '1' else 'false' }}
@@ -21,6 +30,11 @@ sgx.edmm_enable = {{ 'true' if env.get('EDMM', '0') == '1' else 'false' }}
 sgx.enclave_size = "{{ env.get('ENCLAVE_SIZE', '1G') }}"
 sgx.max_threads = {{ env.get('MAX_THREADS', '8') }}
 
+sgx.allowed_files = [
+  "file:allowed/",
+]
+
+# app/ also holds trusted.dat, a 1 MB read-only input file.
 sgx.trusted_files = [
   "file:{{ gramine.libos }}",
   "file:{{ gramine.runtimedir() }}/",

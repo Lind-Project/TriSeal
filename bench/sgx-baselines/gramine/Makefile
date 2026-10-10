@@ -24,7 +24,14 @@ app/automated_tests/%: $(SRC)/%.c | app/automated_tests
 app/automated_tests:
 	mkdir -p $@
 
-$(APP).manifest: app.manifest.template app/$(APP) $(HELPERS:%=app/automated_tests/%)
+# trusted.dat must exist before signing; allowed/ and enc/ back the host mounts.
+app/trusted.dat: | app/automated_tests
+	head -c 1048576 /dev/urandom > $@
+
+allowed enc:
+	mkdir -p $@
+
+$(APP).manifest: app.manifest.template app/$(APP) $(HELPERS:%=app/automated_tests/%) app/trusted.dat | allowed enc
 	gramine-manifest -Dapp=$(APP) -Dlog_level=$(LOG) $< $@
 
 $(APP).manifest.sgx: $(APP).manifest
@@ -37,4 +44,4 @@ direct: $(APP).manifest
 	gramine-direct $(APP) $(ARGS)
 
 clean:
-	rm -rf app *.manifest *.manifest.sgx *.sig
+	rm -rf app allowed enc *.manifest *.manifest.sgx *.sig

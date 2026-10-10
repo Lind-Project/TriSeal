@@ -17,7 +17,10 @@
  * are then skipped and pipe_pingpong uses posix_spawn instead.
  *
  * Environment: MB_FILE overrides the scratch file (default /tmp/microbench.dat);
- * MB_BLOCKS sets how many blocks the file tests use before wrapping (default 256).
+ * MB_BLOCKS sets how many blocks the file tests use before wrapping (default 256);
+ * MB_NOFILL=1 makes the file tests use MB_FILE as it is, read-only: reads
+ * read it without filling it first and writes are skipped (for files that
+ * must exist up front, such as Gramine trusted files).
  */
 #include <errno.h>
 #include <fcntl.h>
@@ -25,6 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -72,9 +76,12 @@ static int t_clock(long n)
  * LibOS heap).
  */
 static long file_blocks = 256;
+static int nofill;
 
 static int file_write(long n, size_t sz)
 {
+  if (nofill)
+    return EROFS;
   int fd = open(file_path, O_CREAT | O_TRUNC | O_WRONLY, 0600);
   if (fd < 0)
     return errno;
@@ -96,7 +103,7 @@ static int file_write(long n, size_t sz)
 /* Times only the reads; the file is filled first with untimed writes. */
 static int file_read(long n, size_t sz, long long *elapsed)
 {
-  int ret = file_write(file_blocks, sz);
+  int ret = nofill ? 0 : file_write(file_blocks, sz);
   if (ret)
     return ret;
   int fd = open(file_path, O_RDONLY);
@@ -124,7 +131,8 @@ static int t_file_write_4k(long n) { return file_write(n, 4096); }
 /* lseek on an open file: a file call that copies no data. */
 static int t_file_lseek(long n)
 {
-  int fd = open(file_path, O_CREAT | O_TRUNC | O_RDWR, 0600);
+  int fd = nofill ? open(file_path, O_RDONLY)
+                  : open(file_path, O_CREAT | O_TRUNC | O_RDWR, 0600);
   if (fd < 0)
     return errno;
   int ret = 0;
@@ -135,6 +143,32 @@ static int t_file_lseek(long n)
     }
   }
   close(fd);
+  return ret;
+}
+
+/* open + close of an existing file, as a compiler does for every header. */
+static int t_file_open_close(long n)
+{
+  int ret = nofill ? 0 : file_write(1, 64);
+  for (long i = 0; i < n && !ret; i++) {
+    int fd = open(file_path, O_RDONLY);
+    if (fd < 0)
+      ret = errno;
+    else
+      close(fd);
+  }
+  return ret;
+}
+
+static int t_file_stat(long n)
+{
+  struct stat st;
+  int ret = nofill ? 0 : file_write(1, 64);
+  for (long i = 0; i < n && !ret; i++) {
+    if (stat(file_path, &st) < 0)
+      ret = errno;
+    sink += st.st_size;
+  }
   return ret;
 }
 
@@ -282,6 +316,8 @@ static const struct test tests[] = {
   {"pipe_rw", t_pipe_rw, SYSCALL, 0},
   {"pipe_pingpong", t_pipe_pingpong, SYSCALL, 0},
   {"file_lseek", t_file_lseek, FILEIO, 0},
+  {"file_open_close", t_file_open_close, FILEIO, 0},
+  {"file_stat", t_file_stat, FILEIO, 0},
   {"file_write_64", t_file_write_64, FILEIO, 0},
   {"file_write_4k", t_file_write_4k, FILEIO, 0},
   {"file_read_64", NULL, FILEIO, 64},
@@ -343,6 +379,7 @@ int main(int argc, char **argv)
     file_path = getenv("MB_FILE");
   if (getenv("MB_BLOCKS") && atol(getenv("MB_BLOCKS")) > 0)
     file_blocks = atol(getenv("MB_BLOCKS"));
+  nofill = getenv("MB_NOFILL") && atoi(getenv("MB_NOFILL"));
   long sys_iters = argc > 1 ? atol(argv[1]) : 100000;
   long proc_iters = argc > 2 ? atol(argv[2]) : 20;
   memset(buf, 'x', sizeof(buf));
@@ -360,6 +397,7 @@ int main(int argc, char **argv)
            : t->kind == FILEIO ? sys_iters / 10 : sys_iters;
     run_test(t, n);
   }
-  unlink(file_path);
+  if (!nofill)
+    unlink(file_path);
   return 0;
 }

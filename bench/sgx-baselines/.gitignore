@@ -5,3 +5,5 @@ gramine/*.sig
 occlum/inst/
 triseal/build/
 results/
+gramine/allowed/
+gramine/enc/
