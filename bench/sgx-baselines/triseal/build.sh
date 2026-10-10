@@ -14,7 +14,9 @@ cd "$(dirname "$0")"
 mkdir -p build
 for f in $(printf '%s\n' "$APP" hello nop | sort -u); do
   cp ../src/$f.c build/
-  "$LIND/scripts/lind_compile" "${FLAGS[@]}" build/$f.c >build/$f.log 2>&1 \
+  # lind_compile also copies its output into lindfs; keep that out of the
+  # lindfs root, where same-named files (hello.cwasm, ...) already live.
+  "$LIND/scripts/lind_compile" --output-dir .sgx-bench "${FLAGS[@]}" build/$f.c >build/$f.log 2>&1 \
     || { echo "lind_compile $f.c failed, see build/$f.log" >&2; exit 1; }
 done
 OUT=$PWD/build
