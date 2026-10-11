@@ -17,7 +17,7 @@ mkdir -p "$OUT"
   done
   gramine-sgx --version 2>/dev/null | head -1
   docker image inspect --format "occlum image {{.Id}} {{.Created}}" occlum/occlum:latest-ubuntu20.04
-  (cd "$HOME/sgx-bench/sfp" && cat SHA256SUMS)
+  cat "${SFP:-$HOME/sgx-bench/sfp}/src/SHA256SUMS"
 } >"$OUT/versions.txt" 2>&1
 echo "== coldwarm $(date +%T)"
 OUT=$OUT/coldwarm "$HERE/coldwarm.sh" 2>"$OUT/coldwarm.progress"

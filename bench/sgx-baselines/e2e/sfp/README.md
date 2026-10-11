@@ -11,7 +11,7 @@ flags and Makefile everywhere:
 | gcc.c    | gcc's cc1, 754K lines (21.9 MB) | `gcc.o`, compiled only (`-c`) |
 
 The sources are not edited. What it takes to build 2004-2006 C with gcc 15
-and glibc 2.39 is in `sfp.conf`:
+and glibc 2.35 (the staged sysroot) is in `sfp.conf`:
 
 - `-std=gnu89 -fpermissive -w`: build them as the C they were written in
   (implicit declarations and int, K&R definitions, `bool` not a keyword),
