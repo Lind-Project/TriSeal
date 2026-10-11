@@ -61,3 +61,90 @@ pub fn for_each(start: usize, end: usize, mut f: impl FnMut(usize)) {
         addr += Page::SIZE;
     }
 }
+
+/// Pages in use, for measuring the payload's working set (feature `in-use`,
+/// which `working-set` turns on): committed pages that lie in a mapping. Committed pages
+/// outside any mapping (unmapped and zeroed, kept for reuse) do not count.
+/// The shim cannot see whether a page that is already committed is touched
+/// again, so two counts bound what is in use:
+///
+/// - touched: pages committed for the mapping they lie in, that is, first
+///   touched by it when the shim commits on first touch only (feature
+///   `working-set`; with commits ahead, committed for it) (the lower bound);
+/// - mapped: those, and committed pages a new mapping reuses, whether it
+///   touches them or not (the upper bound).
+///
+/// Each has its current value and its peak; without the feature they stay 0.
+pub mod in_use {
+    use core::sync::atomic::AtomicU64;
+
+    /// Pages in use now, lower bound.
+    pub static TOUCHED: AtomicU64 = AtomicU64::new(0);
+    /// Peak of [`TOUCHED`].
+    pub static TOUCHED_PEAK: AtomicU64 = AtomicU64::new(0);
+    /// Pages in use now, upper bound.
+    pub static MAPPED: AtomicU64 = AtomicU64::new(0);
+    /// Peak of [`MAPPED`].
+    pub static MAPPED_PEAK: AtomicU64 = AtomicU64::new(0);
+
+    #[cfg(feature = "in-use")]
+    mod bits {
+        use core::sync::atomic::{AtomicU64, Ordering};
+
+        use super::super::{index, WORDS};
+        use super::{MAPPED, MAPPED_PEAK, TOUCHED, TOUCHED_PEAK};
+
+        static TOUCHED_BITS: [AtomicU64; WORDS] = [const { AtomicU64::new(0) }; WORDS];
+        static MAPPED_BITS: [AtomicU64; WORDS] = [const { AtomicU64::new(0) }; WORDS];
+
+        fn set(bits: &[AtomicU64; WORDS], count: &AtomicU64, peak: &AtomicU64, addr: usize) {
+            let (word, bit) = index(addr);
+            if bits[word].fetch_or(bit, Ordering::Relaxed) & bit == 0 {
+                let now = count.fetch_add(1, Ordering::Relaxed) + 1;
+                peak.fetch_max(now, Ordering::Relaxed);
+            }
+        }
+
+        fn clear(bits: &[AtomicU64; WORDS], count: &AtomicU64, addr: usize) {
+            let (word, bit) = index(addr);
+            if bits[word].fetch_and(!bit, Ordering::Relaxed) & bit != 0 {
+                count.fetch_sub(1, Ordering::Relaxed);
+            }
+        }
+
+        pub fn committed(addr: usize) {
+            set(&TOUCHED_BITS, &TOUCHED, &TOUCHED_PEAK, addr);
+            set(&MAPPED_BITS, &MAPPED, &MAPPED_PEAK, addr);
+        }
+
+        pub fn mapped(addr: usize) {
+            set(&MAPPED_BITS, &MAPPED, &MAPPED_PEAK, addr);
+        }
+
+        pub fn unmapped(addr: usize) {
+            clear(&TOUCHED_BITS, &TOUCHED, addr);
+            clear(&MAPPED_BITS, &MAPPED, addr);
+        }
+    }
+
+    /// The page at `addr` was just committed for the mapping it lies in.
+    #[inline]
+    pub fn committed(_addr: usize) {
+        #[cfg(feature = "in-use")]
+        bits::committed(_addr);
+    }
+
+    /// `[start, end)` was just mapped: count the committed pages it reuses.
+    #[inline]
+    pub fn mapped(_start: usize, _end: usize) {
+        #[cfg(feature = "in-use")]
+        super::for_each(_start, _end, bits::mapped);
+    }
+
+    /// The committed page at `addr` is no longer mapped.
+    #[inline]
+    pub fn unmapped(_addr: usize) {
+        #[cfg(feature = "in-use")]
+        bits::unmapped(_addr);
+    }
+}

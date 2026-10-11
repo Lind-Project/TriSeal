@@ -39,9 +39,12 @@ pub mod phase {
     /// Shim counters when the phase was last set.
     pub const AT_PHASE: usize = 8;
     /// Shim counters when the keep exited.
-    pub const AT_EXIT: usize = 16;
+    pub const AT_EXIT: usize = 24;
     /// Number of counters in each set.
-    pub const COUNTERS: usize = 8;
+    pub const COUNTERS: usize = 12;
+    /// Counters from here on are only kept by a shim built to count the
+    /// pages in use (feature `in-use`); they are printed if not zero.
+    pub const WORKING_SET: usize = 8;
     /// Names of the counters.
     pub const NAMES: [&str; COUNTERS] = [
         "syscalls through the direct entry",
@@ -52,6 +55,10 @@ pub mod phase {
         "cpuid through #UD",
         "  of the pages committed ahead, by mprotect()",
         "  of the pages committed ahead, by madvise(MADV_WILLNEED)",
+        "pages in use (lower bound: touched)",
+        "  peak of pages in use (lower bound)",
+        "pages in use (upper bound: with reused committed pages)",
+        "  peak of pages in use (upper bound)",
     ];
 }
 

@@ -12,6 +12,11 @@ gdb = ["dep:gdbstub", "dep:gdbstub_arch", "dbg"]
 dbg = []
 bench = []
 disable-sgx-attestation = []
+# Count the committed pages in use (see `committed::in_use`).
+in-use = []
+# Measure the payload's working set: count the pages in use, and commit pages
+# on first touch only, one at a time.
+working-set = ["in-use"]
 
 [dependencies]
 bitflags = { workspace = true }

@@ -123,7 +123,7 @@ const PHASE_WATCH: usize = 0;
 const PHASE_MARK: usize = 1;
 const PHASE_ACK: usize = 2;
 const PHASE_AT_PHASE: usize = 8;
-const PHASE_AT_EXIT: usize = 16;
+const PHASE_AT_EXIT: usize = 24;
 
 /// What the shim did, counted in the enclave: the host cannot see the
 /// syscalls taken through the direct entry nor the pages committed ahead of
@@ -138,7 +138,8 @@ mod count {
     pub static CPUID: AtomicU64 = AtomicU64::new(0);
     pub static AHEAD_MPROTECT: AtomicU64 = AtomicU64::new(0);
     pub static AHEAD_MADVISE: AtomicU64 = AtomicU64::new(0);
-    pub static ALL: [&AtomicU64; 8] = [
+    use crate::committed::in_use;
+    pub static ALL: [&AtomicU64; 12] = [
         &DIRECT_SYSCALLS,
         &TRAP_SYSCALLS,
         &PAGE_FAULTS,
@@ -147,6 +148,10 @@ mod count {
         &CPUID,
         &AHEAD_MPROTECT,
         &AHEAD_MADVISE,
+        &in_use::TOUCHED,
+        &in_use::TOUCHED_PEAK,
+        &in_use::MAPPED,
+        &in_use::MAPPED_PEAK,
     ];
 }
 
@@ -1143,6 +1148,10 @@ impl<'a> Handler<'a> {
         length: Offset<usize, Page>,
     ) -> usize {
         self.map_heap_on_host(heap);
+        // Measuring the working set: commit on first touch only.
+        if cfg!(feature = "working-set") {
+            return 0;
+        }
         let n = self.mmap_guest(addr, length, RWX);
         count::COMMITTED_AHEAD.fetch_add(n as u64, Ordering::Relaxed);
         n
@@ -1455,6 +1464,7 @@ impl<'a> Handler<'a> {
             debugln!(self, "ERROR heap.mmap() failed!!!!");
             return Err(ENOMEM);
         };
+        committed::in_use::mapped(addr.raw(), (addr + length).raw());
 
         let ret = addr.into_nonnull();
         debugln!(
@@ -1523,6 +1533,7 @@ impl<'a> Handler<'a> {
                 .accept_copy(page_addr, zero_page_addr)
                 .unwrap_or_else(|_| self.attacked());
             committed::insert(raw);
+            committed::in_use::committed(raw);
             committed_now += 1;
         }
         count::COMMITTED.fetch_add(committed_now as u64, Ordering::Relaxed);
@@ -1642,6 +1653,7 @@ impl<'a> Handler<'a> {
                 // Safety: the page is committed and belongs to the mapping
                 // being removed.
                 unsafe { core::ptr::write_bytes(page as *mut u8, 0, Page::SIZE) };
+                committed::in_use::unmapped(page);
             });
         })
         .map_err(|_| ENOMEM)?;
@@ -1708,6 +1720,7 @@ impl<'a> Handler<'a> {
                 self.mmap_host(page, Page::SIZE, PROT_READ | PROT_WRITE | PROT_EXEC)
                     .unwrap_or_else(|_| self.attacked());
             }
+            committed::in_use::unmapped(raw);
             committed::remove(raw);
         }
 
@@ -1961,10 +1974,12 @@ impl<'a> Handler<'a> {
         }
 
         // Commit up to 64 pages of the mapping per fault instead of exactly
-        // one, stopping at the first page that is already committed.
+        // one, stopping at the first page that is already committed (one,
+        // when measuring the working set).
         let mut length = Offset::from_items(1);
         if let Some((region, _)) = heap.record_at(addr) {
-            let max = (region.end - addr).items().min(64);
+            let batch = if cfg!(feature = "working-set") { 1 } else { 64 };
+            let max = (region.end - addr).items().min(batch);
             let mut pages = 1;
             while pages < max && !committed::contains(addr.raw() + pages * Page::SIZE) {
                 pages += 1;

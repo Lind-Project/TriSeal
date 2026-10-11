@@ -18,6 +18,8 @@ default = []
 gdb = ["dep:gdbstub", "enarx-shim-kvm/gdb", "enarx-shim-sgx/gdb"]
 dbg = [ "enarx-exec-wasmtime/dbg", "enarx-shim-kvm/dbg", "enarx-shim-sgx/dbg" ]
 disable-sgx-attestation = ["enarx-shim-sgx/disable-sgx-attestation"]
+in-use = ["enarx-shim-sgx/in-use"]
+working-set = ["enarx-shim-sgx/working-set"]
 bench = ["dep:tracing-flame", "enarx-exec-wasmtime/bench", "enarx-shim-kvm/bench", "enarx-shim-sgx/bench"]
 
 [dependencies]

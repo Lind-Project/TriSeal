@@ -133,20 +133,18 @@ fn print_shim_counters() {
     let Some(page) = super::shared::phase_page() else {
         return;
     };
-    use super::shared::phase::{AT_EXIT, AT_PHASE, COUNTERS, NAMES, PHASE};
+    use super::shared::phase::{AT_EXIT, AT_PHASE, COUNTERS, NAMES, PHASE, WORKING_SET};
     eprintln!(
         "  shim counters (at the phase {} mark / at exit):",
         page[PHASE].load(Relaxed)
     );
     for i in 0..COUNTERS {
-        if !NAMES[i].is_empty() {
-            eprintln!(
-                "    {}: {} / {}",
-                NAMES[i],
-                page[AT_PHASE + i].load(Relaxed),
-                page[AT_EXIT + i].load(Relaxed)
-            );
+        let at_phase = page[AT_PHASE + i].load(Relaxed);
+        let at_exit = page[AT_EXIT + i].load(Relaxed);
+        if NAMES[i].is_empty() || (i >= WORKING_SET && at_phase == 0 && at_exit == 0) {
+            continue;
         }
+        eprintln!("    {}: {} / {}", NAMES[i], at_phase, at_exit);
     }
 }
 
