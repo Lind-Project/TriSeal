@@ -151,6 +151,36 @@ pub struct Config {
     /// The environment variables to provide to the application
     #[serde(default)]
     pub env: HashMap<String, String>,
+
+    /// Shared-memory preload and dump regions for lind
+    #[serde(default)]
+    pub shm: Option<Shm>,
+}
+
+/// Host files mapped outside the keep before lind starts, for a grate to
+/// read its preloads from and write its dump archive to without leaving the
+/// keep (see lind-wasm's `rawposix::shm`).
+///
+/// ```toml
+/// [shm]
+/// preload = "/dev/shm/lua.prld"   # a bundle of preload archives (mkpreload)
+/// dump = "/dev/shm/lua.dump"      # created; truncated to the dump's length
+/// dump_size = 268435456            # capacity of the dump region in bytes
+/// ```
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Shm {
+    /// Host path of the preload bundle, mapped read-only
+    #[serde(default)]
+    pub preload: Option<String>,
+
+    /// Host path the dump archive is written to
+    #[serde(default)]
+    pub dump: Option<String>,
+
+    /// Capacity of the dump region in bytes (default 256 MiB)
+    #[serde(default)]
+    pub dump_size: Option<u64>,
 }
 
 impl Default for Config {
@@ -166,6 +196,7 @@ impl Default for Config {
             args: vec![],
             files,
             steward: None, // TODO: Default to a deployed Steward instance
+            shm: None,
         }
     }
 }

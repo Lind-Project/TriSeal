@@ -69,6 +69,7 @@ impl fmt::Display for Access {
 pub struct Heap {
     brk: Address<usize, Page>,
     brk_region: Region,
+    span: Region,
     // FIXME: use a dynamic Ledger
     // https://github.com/enarx/enarx/issues/2264
     ledger: Ledger<Access, 8188>,
@@ -80,8 +81,14 @@ impl Heap {
         Self {
             brk: addr,
             brk_region: Region::new(addr, addr),
+            span: Region::new(addr, addr + length),
             ledger: Ledger::new(addr, length),
         }
+    }
+
+    /// The whole address range managed by the heap.
+    pub fn span(&self) -> Region {
+        self.span
     }
 
     /// Check whether the heap contains the given region, and return the

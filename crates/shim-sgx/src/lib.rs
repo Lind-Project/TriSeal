@@ -14,6 +14,9 @@
 #![deny(missing_docs)]
 #![warn(rust_2018_idioms)]
 
+pub mod clock;
+pub mod committed;
+pub mod console;
 pub mod entry;
 pub mod handler;
 pub mod heap;
