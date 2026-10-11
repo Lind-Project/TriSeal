@@ -146,6 +146,47 @@ fn print_shim_counters() {
         }
         eprintln!("    {}: {} / {}", NAMES[i], at_phase, at_exit);
     }
+    print_mappings(page);
+}
+
+/// Print the mappings that held the most pages in use at the phase mark.
+fn print_mappings(page: &[std::sync::atomic::AtomicU64]) {
+    use super::shared::phase::{MAPS, MAP_FIELDS};
+    let n = page[MAPS].load(Relaxed) as usize;
+    if n == 0 {
+        return;
+    }
+    let mb = |pages: u64| pages as f64 * 4096.0 / (1 << 20) as f64;
+    eprintln!("  mappings with the most pages in use at the phase mark:");
+    eprintln!(
+        "    {:>14} {:>12} {:>4} {:>10} {:>10} {:>8}",
+        "heap offset", "size MB", "rwx", "in use MB", "commit MB", "lin.mem"
+    );
+    let (mut touched, mut committed) = (0, 0);
+    for i in 0..n {
+        let f = |j: usize| page[MAPS + 1 + i * MAP_FIELDS + j].load(Relaxed);
+        let access = f(2);
+        let rwx: String = [(1, 'r'), (2, 'w'), (4, 'x')]
+            .iter()
+            .map(|&(b, c)| if access & b != 0 { c } else { '-' })
+            .collect();
+        let lin = match f(5) {
+            0 => "-".to_string(),
+            n => format!("#{n}"),
+        };
+        eprintln!(
+            "    {:>#14x} {:>12.1} {:>4} {:>10.1} {:>10.1} {:>8}",
+            f(0),
+            mb(f(1)),
+            rwx,
+            mb(f(3)),
+            mb(f(4)),
+            lin
+        );
+        touched += f(3);
+        committed += f(4);
+    }
+    eprintln!("    total of these: in use {:.1} MB, committed {:.1} MB", mb(touched), mb(committed));
 }
 
 /// Record an enclave entry via `how` (`EENTER` or `ERESUME`).

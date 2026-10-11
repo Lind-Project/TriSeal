@@ -124,6 +124,7 @@ const PHASE_MARK: usize = 1;
 const PHASE_ACK: usize = 2;
 const PHASE_AT_PHASE: usize = 8;
 const PHASE_AT_EXIT: usize = 24;
+const PHASE_MAPS: usize = 48;
 
 /// What the shim did, counted in the enclave: the host cannot see the
 /// syscalls taken through the direct entry nor the pages committed ahead of
@@ -153,6 +154,87 @@ mod count {
         &in_use::MAPPED,
         &in_use::MAPPED_PEAK,
     ];
+}
+
+/// Mappings of at least 4 GiB (wasm linear memories with their guards), in
+/// the order they were made, to tell which one a mapping lies in.
+#[cfg(feature = "in-use")]
+static RESERVATIONS: spin::Mutex<([(usize, usize); 64], usize)> = spin::Mutex::new(([(0, 0); 64], 0));
+
+/// Note a mapping of `[start, end)` if it is a reservation (see
+/// [`RESERVATIONS`]).
+#[cfg(feature = "in-use")]
+fn note_reservation(start: usize, end: usize) {
+    if end - start >= 1 << 32 {
+        let mut r = RESERVATIONS.lock();
+        let n = r.1;
+        if n < r.0.len() {
+            r.0[n] = (start, end);
+            r.1 += 1;
+        }
+    }
+}
+
+/// The 1-based number of the reservation `addr` lies in, 0 if none.
+#[cfg(feature = "in-use")]
+fn reservation_of(addr: usize) -> u64 {
+    let r = RESERVATIONS.lock();
+    for (i, &(start, end)) in r.0[..r.1].iter().enumerate().rev() {
+        if start <= addr && addr < end {
+            return i as u64 + 1;
+        }
+    }
+    0
+}
+
+/// Write the mappings that hold the most pages in use to the phase page, from
+/// word [`PHASE_MAPS`]: their number, then for each its offset in the heap,
+/// pages, access, pages in use (lower bound), pages committed and the
+/// reservation it lies in.
+#[cfg(feature = "in-use")]
+fn store_mappings(page: usize) {
+    const FIELDS: usize = 6;
+    const MAX: usize = (PHASE_SIZE / 8 - PHASE_MAPS - 1) / FIELDS;
+    let word = |i: usize| unsafe { &*((page + i * 8) as *const AtomicU64) };
+    let heap = HEAP.read();
+    let base = heap.span().start.raw();
+    let mut top = [[0u64; FIELDS]; MAX];
+    let mut n = 0;
+    for r in heap.records() {
+        let (start, end) = (r.region.start.raw(), r.region.end.raw());
+        let (touched, committed) = committed::in_use::count(start, end);
+        if committed == 0 {
+            continue;
+        }
+        let entry = [
+            (start - base) as u64,
+            ((end - start) / Page::SIZE) as u64,
+            r.access.bits() as u64,
+            touched,
+            committed,
+            reservation_of(start),
+        ];
+        // Keep the MAX entries with the most pages in use, largest first.
+        let mut i = if n < MAX {
+            n += 1;
+            n - 1
+        } else if top[MAX - 1][3] < touched {
+            MAX - 1
+        } else {
+            continue;
+        };
+        while i > 0 && top[i - 1][3] < touched {
+            top[i] = top[i - 1];
+            i -= 1;
+        }
+        top[i] = entry;
+    }
+    word(PHASE_MAPS).store(n as u64, Ordering::Relaxed);
+    for (i, entry) in top[..n].iter().enumerate() {
+        for (j, v) in entry.iter().enumerate() {
+            word(PHASE_MAPS + 1 + i * FIELDS + j).store(*v, Ordering::Relaxed);
+        }
+    }
 }
 
 /// Copy the counters to the phase page at word `at`.
@@ -1127,6 +1209,8 @@ impl<'a> Handler<'a> {
         }
         let word = |i: usize| unsafe { &*((page + i * 8) as *const AtomicU64) };
         store_counters(PHASE_AT_PHASE);
+        #[cfg(feature = "in-use")]
+        store_mappings(page);
         word(PHASE_MARK).store(n, Ordering::SeqCst);
         if word(PHASE_WATCH).load(Ordering::SeqCst) != 0 {
             let deadline = self.clock_ns(false) + NSEC_PER_SEC;
@@ -1465,6 +1549,8 @@ impl<'a> Handler<'a> {
             return Err(ENOMEM);
         };
         committed::in_use::mapped(addr.raw(), (addr + length).raw());
+        #[cfg(feature = "in-use")]
+        note_reservation(addr.raw(), (addr + length).raw());
 
         let ret = addr.into_nonnull();
         debugln!(

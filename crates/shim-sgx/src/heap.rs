@@ -101,6 +101,12 @@ impl Heap {
         self.ledger.contains(addr, length)
     }
 
+    /// The mappings of the heap.
+    #[cfg(feature = "in-use")]
+    pub fn records(&self) -> &[Record<Access>] {
+        self.ledger.records()
+    }
+
     /// Return the region and access of the ledger record containing `addr`.
     pub fn record_at(&self, addr: Address<usize, Page>) -> Option<(Region, Access)> {
         let probe = Region::new(addr, addr + Offset::from_items(1));

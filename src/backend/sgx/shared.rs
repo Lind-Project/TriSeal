@@ -42,6 +42,14 @@ pub mod phase {
     pub const AT_EXIT: usize = 24;
     /// Number of counters in each set.
     pub const COUNTERS: usize = 12;
+    /// Mappings that hold the most pages in use at the last phase mark (shim
+    /// feature `in-use`): their number, then for each its offset in the heap,
+    /// pages, access (read 1, write 2, execute 4), pages in use, pages
+    /// committed and the wasm linear memory it lies in (the n-th mapping of
+    /// 4 GiB or more; 0 for none).
+    pub const MAPS: usize = 48;
+    /// Words per mapping.
+    pub const MAP_FIELDS: usize = 6;
     /// Counters from here on are only kept by a shim built to count the
     /// pages in use (feature `in-use`); they are printed if not zero.
     pub const WORKING_SET: usize = 8;

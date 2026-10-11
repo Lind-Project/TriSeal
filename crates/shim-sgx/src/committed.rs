@@ -125,6 +125,25 @@ pub mod in_use {
             clear(&TOUCHED_BITS, &TOUCHED, addr);
             clear(&MAPPED_BITS, &MAPPED, addr);
         }
+
+        pub fn count(start: usize, end: usize) -> (u64, u64) {
+            let (mut touched, mut committed) = (0, 0);
+            let mut addr = start;
+            while addr < end {
+                let (word, bit) = index(addr);
+                // A whole word at once where the range covers it.
+                if bit == 1 && addr + 64 * super::super::Page::SIZE <= end {
+                    touched += TOUCHED_BITS[word].load(Ordering::Relaxed).count_ones() as u64;
+                    committed += super::super::BITS[word].load(Ordering::Relaxed).count_ones() as u64;
+                    addr += 64 * super::super::Page::SIZE;
+                    continue;
+                }
+                touched += (TOUCHED_BITS[word].load(Ordering::Relaxed) & bit != 0) as u64;
+                committed += (super::super::BITS[word].load(Ordering::Relaxed) & bit != 0) as u64;
+                addr += super::super::Page::SIZE;
+            }
+            (touched, committed)
+        }
     }
 
     /// The page at `addr` was just committed for the mapping it lies in.
@@ -146,5 +165,11 @@ pub mod in_use {
     pub fn unmapped(_addr: usize) {
         #[cfg(feature = "in-use")]
         bits::unmapped(_addr);
+    }
+
+    /// Pages of `[start, end)` in use (lower bound) and committed.
+    #[cfg(feature = "in-use")]
+    pub fn count(start: usize, end: usize) -> (u64, u64) {
+        bits::count(start, end)
     }
 }
