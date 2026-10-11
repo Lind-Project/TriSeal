@@ -39,6 +39,8 @@ fn enarxcall_name(num: usize) -> &'static str {
         0x12 => "UnPark",
         0x13 => "Spawn",
         0x14 => "NewSallyport",
+        0x15 => "MapShm",
+        0x16 => "CommitShm",
         _ => "other",
     }
 }

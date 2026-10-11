@@ -122,6 +122,38 @@ enarxcall histogram and a snapshot at the first console write).
 `lua-triseal.sh` takes `NODUMP=1` so that dumping lua and luac does not
 count.
 
+## Preloads in shared memory, attested ("preloading signing")
+
+`lua-triseal-shm.sh` runs the build with the inputs packed on the host into
+one bundle of two archives (`mkpreload <bundle> <pipeline...> --section
+<sources...>`) and an in-toto grate above the IMFS grate:
+
+1. Before lind starts, the keep has the host map the bundle and a dump file
+   outside the enclave (`[shm]` in Enarx.toml).
+2. IMFS copies the compiler pipeline out of that memory and stages it, then
+   stops; the in-toto grate reads the archive from IMFS's memory, hashes
+   every file and signs an in-toto statement (DSSE, ECDSA P-256 key made in
+   the enclave).
+3. IMFS resumes with the sources, and stops again for the second
+   attestation, which records the hash of the first envelope.
+4. make runs. At exit lua, luac and the attestations go into one archive,
+   copied to the dump memory and committed with one ocall.
+
+`verify-attest.py` checks the envelopes on the host against the bundle
+(signature with openssl, subjects = the files and their SHA-256, chain).
+`TAMPER=1` flips a byte of the bundle after packing: IMFS rejects that
+archive and nothing runs.
+
+`shm-ocalls.sh` counts what this asks of the host, with a runtime built
+with `triseal/stats-overlay.py`. Once IMFS runs, staging the bundle (345 MB),
+both attestations and the compile take no ocall; the dump takes one
+(`CommitShm`), followed by the console output (2 writes) and the exit.
+Everything else (about 390 ocalls) is keep startup: the attestation of the
+keep, reading the two grate modules, the thread pool and mapping the two
+files. The build takes 53.4 s (53.0-53.9; 47.3 s with host preloads and no
+attestation). Code: TriSeal `triseal-shm-preload`, lind-wasm
+`triseal-shm-preload`, lind-wasm-example-grates `imfs-preload-attest`.
+
 ## Known TriSeal issues found here
 
 - Anonymous `MAP_FIXED`, `brk` shrink-then-grow and munmap left stale data,
