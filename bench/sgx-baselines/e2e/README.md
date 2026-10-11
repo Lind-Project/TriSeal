@@ -99,6 +99,29 @@ trims them again (the shim's munmap). Reusing committed pages across cages
 would need changes to the shim's ledger (mmledger) or a memory pool in
 the wasmtime/lind layer.
 
+## No ocalls after startup
+
+TriSeal branch `triseal-zero-ocall` (local, on `open-futex` 0df4e331)
+moves everything a running workload asks of the host into the enclave:
+page commits (the heap is mapped on the host once and committed pages are
+zeroed and reused instead of trimmed), futex waits (spinning), new threads
+(4 threads wait in the enclave), `clock_gettime` (TSC) and console output
+(buffered until exit). The host also stops re-running a handler's sallyport
+block after a nested page fault.
+
+Lua build: no ocall from the start of the compile until the console is
+flushed at exit (133,276 before). Cold 47.3 s, first build in a running
+keep 35.9 s, warm 32.0 s (124.4 / 114.4 / 110.9 s before; Gramine from
+source 127.2 / 128.2 / 127.3 s). The price is CPU time: waiting threads
+spin, about 3.9 cores busy during the build. Details and data:
+`zero-ocall-20261010/` in the data repository.
+
+`zero-ocall.sh` counts the ocalls of a build against a probe for a runtime
+built with `triseal/stats-overlay.py` (the `ENARX_SGX_STATS` module plus an
+enarxcall histogram and a snapshot at the first console write).
+`lua-triseal.sh` takes `NODUMP=1` so that dumping lua and luac does not
+count.
+
 ## Known TriSeal issues found here
 
 - Anonymous `MAP_FIXED`, `brk` shrink-then-grow and munmap left stale data,

@@ -10,6 +10,8 @@
 #   sources (materials) and lua/luac (products) with a key made in the keep.
 #   PROBE=1 runs `make --version` with the same preloads instead, to measure
 #   keep startup plus preloading on their own.
+#   NODUMP=1 leaves lua and luac in the keep (no DUMPS), so that counting
+#   enclave transitions as build minus probe covers only the compile.
 #   TWICE=1 builds two copies of the tree one after the other in the same
 #   keep (src/twobuild.c) and prints "@build <n> <dir> <s> <rc>" for each:
 #   the first build is cold, the second runs with the module cache and
@@ -66,6 +68,7 @@ for d in "${SRCS[@]}"; do
   DUMPS+="$d/lua=$d/lua;$d/luac=$d/luac;"
 done
 DUMPS=${DUMPS%;}
+[ "${NODUMP:-0}" = 1 ] && DUMPS=""
 if [ "${TWICE:-0}" = 1 ]; then
   files=("$TWOBUILD" "${files[@]}")
   MAKE_CMD=("$TWOBUILD" "$BIN/make" "${SRCS[@]}" -- "${MAKE_ARGS[@]}")
