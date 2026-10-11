@@ -28,6 +28,9 @@ pub struct Thread {
     block: [Vec<usize>; 2],
     cssa: usize,
     how: usize,
+    /// The exception that made the host enter the enclave at each CSSA:
+    /// an exception at CSSA n is handled by entering at CSSA n + 1.
+    entered_for: [Option<Vector>; 6],
     #[cfg(feature = "gdb")]
     gdb_fd: Option<TcpStream>,
 }
@@ -65,6 +68,7 @@ impl super::super::Keep for super::Keep {
             block,
             cssa: usize::default(),
             how: EENTER,
+            entered_for: [None; 6],
             #[cfg(feature = "gdb")]
             gdb_fd: None,
         })))
@@ -167,7 +171,12 @@ impl super::super::Thread for Thread {
 
         // Keep track of the CSSA
         match self.how {
-            EENTER => self.cssa += 1,
+            EENTER => {
+                self.cssa += 1;
+                if let Some(slot) = self.entered_for.get_mut(self.cssa) {
+                    *slot = Some(run.vector);
+                }
+            }
             ERESUME => match self.cssa {
                 0 => unreachable!(),
                 _ => self.cssa -= 1,
@@ -180,8 +189,14 @@ impl super::super::Thread for Thread {
             bail!("SGX CSSA overflow");
         }
 
-        // Handle some potential sallyport contents
-        if self.cssa == 1 || self.cssa == 2 {
+        // Handle some potential sallyport contents. The handler that just
+        // exited asked for them if it was entered for its own `syscall`
+        // instruction (#UD); a handler entered for a page fault inside the
+        // previous handler may finish without asking the host for anything,
+        // and the previous handler's block must not run again then.
+        let sallied =
+            self.entered_for.get(self.cssa + 1).copied().flatten() == Some(Vector::InvalidOpcode);
+        if (self.cssa == 1 || self.cssa == 2) && sallied {
             if let (EENTER, ERESUME) = (how, self.how) {
                 let block: Block = self.block[self.cssa - 1].as_mut_slice().into();
                 for item in block {
