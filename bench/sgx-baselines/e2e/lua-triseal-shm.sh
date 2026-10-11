@@ -24,6 +24,8 @@
 #   PROBE=1     run `make --version` instead of the build
 #   SMALL=1     pack only make, as a one-archive bundle (use with PROBE=1)
 #   NOATTEST=1  leave out --attest;  NODUMP=1  leave out --dump-shm
+#   NOINTOTO=1  run the IMFS grate as the main module, without the in-toto
+#               grate (and so without attestation)
 #   TAMPER=1    flip the last byte of the bundle after packing (a byte of the
 #               last source file): the keep must refuse to run
 set -uo pipefail
@@ -82,7 +84,7 @@ MAKE_ARGS=(all SYSCFLAGS=-DLUA_USE_POSIX "CC=$CC" "AR=$BIN/ar rcu" "RANLIB=$BIN/
 CMD=("$BIN/make" -C "$SRC" "${MAKE_ARGS[@]}")
 [ "${PROBE:-0}" = 1 ] && CMD=("$BIN/make" --version)
 FLAGS=(--preload-shm)
-[ "${NOATTEST:-0}" = 1 ] || FLAGS+=(--attest)
+[ "${NOATTEST:-0}" = 1 ] || [ "${NOINTOTO:-0}" = 1 ] || FLAGS+=(--attest)
 [ "${NODUMP:-0}" = 1 ] || FLAGS+=(--dump-shm)
 DUMPS="$SRC/lua=out/lua;$SRC/luac=out/luac"
 [ "${PROBE:-0}" = 1 ] && DUMPS=""
@@ -90,14 +92,16 @@ DUMPS="$SRC/lua=out/lua;$SRC/luac=out/luac"
 {
   printf 'args = ['
   sep=""
-  for a in "$IMFS_GRATE" "${FLAGS[@]}" "${CMD[@]}"; do printf '%s"%s"' "$sep" "$a"; sep=", "; done
+  MAIN=("$IMFS_GRATE")
+  [ "${NOINTOTO:-0}" = 1 ] && MAIN=()
+  for a in "${MAIN[@]}" "${FLAGS[@]}" "${CMD[@]}"; do printf '%s"%s"' "$sep" "$a"; sep=", "; done
   printf ']\n\n[env]\nDUMPS = "%s"\n\n' "$DUMPS"
   printf '[shm]\npreload = "%s"\ndump = "%s"\ndump_size = %d\n' "$BUNDLE" "$DUMP" $((256 << 20))
 } >"$W/build.toml"
 
 start=$(date +%s.%N)
 LIND_GRATE_WORKERS=1 ENARX_BACKEND=sgx ENARX_WASMCFGFILE="$W/build.toml" \
-  timeout 3600 ${TRACE:-} "$ENARX" run "$INTOTO_GRATE" >"$W/build.log" 2>&1
+  timeout 3600 ${TRACE:-} "$ENARX" run "$([ "${NOINTOTO:-0}" = 1 ] && echo "$IMFS_GRATE" || echo "$INTOTO_GRATE")" >"$W/build.log" 2>&1
 rc=$?
 end=$(date +%s.%N)
 echo "wall $(echo "$end - $start" | bc) rc=$rc"
