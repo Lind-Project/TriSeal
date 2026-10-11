@@ -15,6 +15,7 @@ use std::{io, ptr};
 
 use anyhow::{bail, Context, Result};
 use sallyport::item;
+use sallyport::item::enarxcall::EXIT_GROUP_MARK;
 use sallyport::item::{Block, Item};
 use sgx::enclu::{EENTER, EEXIT, ERESUME};
 use sgx::ssa::Vector;
@@ -87,10 +88,13 @@ impl super::super::Thread for Thread {
         let oldfs = FS::read_base().as_u64();
         let oldgs = GS::read_base().as_u64();
 
-        let block = if self.cssa == 1 || self.cssa == 2 {
-            self.block[self.cssa - 1].as_mut_ptr()
-        } else {
-            ptr::null_mut()
+        // A thread entered at CSSA 0 gets the block of CSSA 1 too: a syscall
+        // made through the shim's direct entry, without an exception, puts
+        // its request there before asking the host.
+        let block = match self.cssa {
+            0 | 1 => self.block[0].as_mut_ptr(),
+            2 => self.block[1].as_mut_ptr(),
+            _ => ptr::null_mut(),
         };
 
         // The `enclu` instruction consumes `rax`, `rbx` and `rcx`. However,
@@ -131,6 +135,7 @@ impl super::super::Thread for Thread {
         debug_assert_eq!(oldfs, FS::read_base().as_u64());
         debug_assert_eq!(oldgs, GS::read_base().as_u64());
 
+        let exit_group = exit_status & !0xffff_ffff == EXIT_GROUP_MARK;
         let exit_status = exit_status as i32;
 
         self.how = match run.function as usize {
@@ -145,8 +150,15 @@ impl super::super::Thread for Thread {
                 EENTER
             }
             EEXIT if self.cssa > 0 => ERESUME,
+            EEXIT if self.cssa == 0 && exit_group => {
+                // exit_group() from the shim's direct syscall entry
+                trace!("exit_group({exit_status})");
+                super::shared::finish();
+                std::process::exit(exit_status);
+            }
             EEXIT if self.cssa == 0 => {
                 trace!("exit({exit_status})");
+                super::shared::finish();
                 return Ok(Command::Exit(exit_status as _));
             }
 
@@ -250,6 +262,7 @@ impl super::super::Thread for Thread {
                             ..,
                         ) if (*num == libc::SYS_exit_group as usize) => {
                             trace!("exit_group({code})");
+                            super::shared::finish();
                             std::process::exit(*code as _);
                         }
 

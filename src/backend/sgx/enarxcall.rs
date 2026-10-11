@@ -351,7 +351,27 @@ pub(crate) fn sgx_enarxcall<'a>(
             *ret = if addr == libc::MAP_FAILED {
                 (-io::Error::last_os_error().raw_os_error().unwrap()) as usize
             } else {
+                // The dump file is cut to the length of the archive in it
+                // when the keep exits.
+                if *writable != 0 {
+                    super::shared::set_dump(fd, addr as usize, *len);
+                }
                 addr as usize
+            };
+            Ok(None)
+        }
+
+        item::Enarxcall {
+            num: item::enarxcall::Number::MapHostShared,
+            argv: [kind, len, ..],
+            ret,
+            ..
+        } => {
+            // Memory the keep writes its console and phase marks into
+            // without leaving the enclave.
+            *ret = match super::shared::map(*kind, *len) {
+                Ok(addr) => addr,
+                Err(e) => (-e) as usize,
             };
             Ok(None)
         }

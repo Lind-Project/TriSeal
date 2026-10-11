@@ -24,6 +24,7 @@ use enarx_shim_sgx::{
 };
 use noted::noted;
 use primordial::Page;
+use sallyport::item::enarxcall::EXIT_GROUP_MARK;
 use sallyport::util::ptr::is_aligned_non_null;
 use sallyport::{elf::note, REQUIRES};
 use sgx::parameters::{Attributes, MiscSelect};
@@ -289,12 +290,22 @@ fn validate_block_ptr(ptr: *mut u8) -> &'static mut [usize; BLOCK_SIZE / size_of
     unsafe { &mut *(ptr as *mut [usize; BLOCK_SIZE / size_of::<usize>()]) }
 }
 
+/// What `main()` leaves the enclave with at CSSA 0: the payload's status,
+/// marked if it comes from an `exit_group()` taken through the direct
+/// syscall entry (see [`EXIT_GROUP_MARK`]).
+fn exit_value(tcb: &mut Tcb, status: i32) -> u64 {
+    match tcb.exit_group.take() {
+        Some(code) => EXIT_GROUP_MARK | code as u32 as u64,
+        None => status as u32 as u64,
+    }
+}
+
 unsafe extern "C" fn main(
     block_ptr: *mut u8,
     ssas: &mut [StateSaveArea; NUM_SSA],
     cssa: usize,
     tcb: &mut MaybeUninit<Tcb>,
-) -> i32 {
+) -> u64 {
     // Enable exceptions:
     ssas[cssa].extra[0] = 1;
 
@@ -302,11 +313,20 @@ unsafe extern "C" fn main(
 
     match cssa {
         0 => {
-            // Initialize the TCB.
+            handler::set_start(_start as usize as _);
+
+            // Initialize the TCB. A host that gives CSSA 0 a block lets
+            // syscalls through the direct entry ask it for things.
+            let block = if block_ptr.is_null() {
+                0
+            } else {
+                validate_block_ptr(block_ptr).as_mut_ptr() as usize
+            };
             let tcb = {
                 tcb.write(Tcb::default());
                 tcb.assume_init_mut()
             };
+            tcb.block = block;
 
             // A thread spawned to fill the pool has no work yet: it waits for
             // a `clone()` like a thread that has finished its work.
@@ -322,7 +342,8 @@ unsafe extern "C" fn main(
                         tcb.tid = 0;
 
                         // run the executable payload
-                        ret = entry::entry(&ENARX_EXEC_START as *const u8 as _, tcb);
+                        let status = entry::entry(&ENARX_EXEC_START as *const u8 as _, tcb);
+                        ret = exit_value(tcb, status);
                         break;
                     }
                     NewThread::Thread(NewThreadFromRegisters {
@@ -332,11 +353,19 @@ unsafe extern "C" fn main(
                     }) => {
                         // register the thread
                         *tcb = Tcb::default();
+                        tcb.block = block;
                         tcb.tid = tid;
                         tcb.clear_on_exit = NonNull::new(clear_on_exit as _);
 
                         // load the registers
-                        let _ = regs.load_registers(tcb);
+                        let status = regs.load_registers(tcb);
+
+                        // exit_group() from the direct syscall entry: leave
+                        // the enclave, for the host to exit the process.
+                        if tcb.exit_group.is_some() {
+                            ret = exit_value(tcb, status);
+                            break;
+                        }
                     }
                 }
 

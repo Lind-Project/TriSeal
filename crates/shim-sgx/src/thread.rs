@@ -269,10 +269,20 @@ pub struct ReturnToMain {
 }
 
 /// Thread Control Block
+///
+/// While a thread runs the payload, its GS base points at its TCB, so that
+/// the direct syscall entry can find it (the payload does not use GS).
 #[derive(Default)]
+#[repr(C)]
 pub struct Tcb {
-    /// State to return to CSSA[0]
+    /// State to return to CSSA[0]. Must stay the first field: the payload
+    /// entry code passes its address as the address of the TCB.
     pub return_to_main: ReturnToMain,
+    /// The sallyport block the host gives this thread at CSSA 0 and 1.
+    pub block: usize,
+    /// Set by an `exit_group()` taken through the direct syscall entry: the
+    /// thread returns to the shim's thread loop, which then leaves the enclave.
+    pub exit_group: Option<i32>,
     /// The thread ID
     pub tid: pid_t,
     /// Holds addresses of AtomicU32 to clear on exiting the thread
@@ -311,6 +321,7 @@ impl LoadRegsExt for GenPurposeRegs {
             "lea rcx,         [rip + 2f]         ",
             "mov [rdx + 4*8], rcx                ", // tcb.rip = label 2
             "mov [rdx + 5*8], rsp                ", // tcb.rsp
+            "wrgsbase rdx                        ", // GS base = the TCB
             "mov rsp, rax                        ", // switch stack pointer
             "pop rax                             ", // skip rax
             "pop rcx                             ",
