@@ -4,6 +4,7 @@
 
 mod identity;
 mod io;
+mod shm;
 //mod net;
 // mod lind_boot;
 
@@ -49,6 +50,16 @@ impl Runtime {
             .map(|(name, value)| (name, Some(value)))
             .collect();
 
+        // Map the [shm] regions before lind starts, so that the preload
+        // bundle and the dump file are there for the first grate.
+        if let Some(regions) = config.shm.as_ref() {
+            shm::setup(regions).context("failed to set up the [shm] regions")?;
+        }
+
+        // Hand the workload's phase marks (LIND_PHASE) to the shim, which
+        // records them where the host can count from them.
+        rawposix::phase::register(Box::new(shm::phase));
+
         let options = lind_boot::cli::CliOptions {
             verbose: 0,
             debug: false,
@@ -63,6 +74,10 @@ impl Runtime {
             vars,
             preloads: Vec::new(),
             thread_stack_size: 64 * 1024 * 1024,
+            // The [shm] regions are mapped by the host and registered above.
+            preload_shm: None,
+            dump_shm: None,
+            dump_shm_size: 0,
         };
 
         rawposix_start(0);

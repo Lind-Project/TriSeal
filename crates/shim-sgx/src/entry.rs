@@ -113,6 +113,7 @@ pub unsafe fn entry(offset: *const (), tcb: &mut Tcb) -> i32 {
         "lea rcx,         [rip + 2f]         ",
         "mov [rdx + 4*8], rcx                ", // tcb.rip = label 2
         "mov [rdx + 5*8], rsp                ", // tcb.rsp
+        "wrgsbase rdx                        ", // GS base = the TCB
         "mov rsp,         rax                ", // load crt0 stack
         "mov rax,         0                  ",
         "wrfsbase rax                        ", // clear fsbase

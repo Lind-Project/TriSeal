@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::enarxcall::sgx_enarxcall;
+use super::stats;
 #[cfg(feature = "gdb")]
 use crate::backend::execute_gdb;
 use crate::backend::Command;
@@ -10,11 +11,13 @@ use std::iter;
 use std::mem::{size_of, MaybeUninit};
 #[cfg(feature = "gdb")]
 use std::net::TcpStream;
+use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
 use std::{io, ptr};
 
 use anyhow::{bail, Context, Result};
 use sallyport::item;
+use sallyport::item::enarxcall::EXIT_GROUP_MARK;
 use sallyport::item::{Block, Item};
 use sgx::enclu::{EENTER, EEXIT, ERESUME};
 use sgx::ssa::Vector;
@@ -28,6 +31,9 @@ pub struct Thread {
     block: [Vec<usize>; 2],
     cssa: usize,
     how: usize,
+    /// The exception that made the host enter the enclave at each CSSA:
+    /// an exception at CSSA n is handled by entering at CSSA n + 1.
+    entered_for: [Option<Vector>; 6],
     #[cfg(feature = "gdb")]
     gdb_fd: Option<TcpStream>,
 }
@@ -65,6 +71,7 @@ impl super::super::Keep for super::Keep {
             block,
             cssa: usize::default(),
             how: EENTER,
+            entered_for: [None; 6],
             #[cfg(feature = "gdb")]
             gdb_fd: None,
         })))
@@ -73,9 +80,12 @@ impl super::super::Keep for super::Keep {
 
 impl super::super::Thread for Thread {
     fn enter(&mut self, _gdblisten: &Option<String>) -> Result<Command> {
+        stats::init();
+
         let mut run: Run = unsafe { MaybeUninit::zeroed().assume_init() };
         run.tcs = self.tcs as u64;
         let how = self.how;
+        stats::entry(how);
         let exit_status: u64;
         use x86_64::registers::segmentation::Segment64;
         use x86_64::registers::segmentation::{FS, GS};
@@ -83,10 +93,13 @@ impl super::super::Thread for Thread {
         let oldfs = FS::read_base().as_u64();
         let oldgs = GS::read_base().as_u64();
 
-        let block = if self.cssa == 1 || self.cssa == 2 {
-            self.block[self.cssa - 1].as_mut_ptr()
-        } else {
-            ptr::null_mut()
+        // A thread entered at CSSA 0 gets the block of CSSA 1 too: a syscall
+        // made through the shim's direct entry, without an exception, puts
+        // its request there before asking the host.
+        let block = match self.cssa {
+            0 | 1 => self.block[0].as_mut_ptr(),
+            2 => self.block[1].as_mut_ptr(),
+            _ => ptr::null_mut(),
         };
 
         // The `enclu` instruction consumes `rax`, `rbx` and `rcx`. However,
@@ -127,7 +140,9 @@ impl super::super::Thread for Thread {
         debug_assert_eq!(oldfs, FS::read_base().as_u64());
         debug_assert_eq!(oldgs, GS::read_base().as_u64());
 
+        let exit_group = exit_status & !0xffff_ffff == EXIT_GROUP_MARK;
         let exit_status = exit_status as i32;
+        stats::exit(run.function as usize, run.vector);
 
         self.how = match run.function as usize {
             EENTER | ERESUME if run.vector == Vector::InvalidOpcode => EENTER,
@@ -141,8 +156,15 @@ impl super::super::Thread for Thread {
                 EENTER
             }
             EEXIT if self.cssa > 0 => ERESUME,
+            EEXIT if self.cssa == 0 && exit_group => {
+                // exit_group() from the shim's direct syscall entry
+                trace!("exit_group({exit_status})");
+                super::shared::finish();
+                std::process::exit(exit_status);
+            }
             EEXIT if self.cssa == 0 => {
                 trace!("exit({exit_status})");
+                super::shared::finish();
                 return Ok(Command::Exit(exit_status as _));
             }
 
@@ -167,7 +189,12 @@ impl super::super::Thread for Thread {
 
         // Keep track of the CSSA
         match self.how {
-            EENTER => self.cssa += 1,
+            EENTER => {
+                self.cssa += 1;
+                if let Some(slot) = self.entered_for.get_mut(self.cssa) {
+                    *slot = Some(run.vector);
+                }
+            }
             ERESUME => match self.cssa {
                 0 => unreachable!(),
                 _ => self.cssa -= 1,
@@ -180,13 +207,21 @@ impl super::super::Thread for Thread {
             bail!("SGX CSSA overflow");
         }
 
-        // Handle some potential sallyport contents
-        if self.cssa == 1 || self.cssa == 2 {
+        // Handle some potential sallyport contents. The handler that just
+        // exited asked for them if it was entered for its own `syscall`
+        // instruction (#UD); a handler entered for a page fault inside the
+        // previous handler may finish without asking the host for anything,
+        // and the previous handler's block must not run again then.
+        let sallied =
+            self.entered_for.get(self.cssa + 1).copied().flatten() == Some(Vector::InvalidOpcode);
+        if (self.cssa == 1 || self.cssa == 2) && sallied {
             if let (EENTER, ERESUME) = (how, self.how) {
+                stats::SALLYPORT_BATCHES.fetch_add(1, Relaxed);
                 let block: Block = self.block[self.cssa - 1].as_mut_slice().into();
                 for item in block {
                     match item {
                         Item::Gdbcall(_gdbcall, _data) => {
+                            stats::GDBCALLS.fetch_add(1, Relaxed);
                             #[cfg(feature = "gdb")]
                             unsafe {
                                 execute_gdb(
@@ -201,6 +236,7 @@ impl super::super::Thread for Thread {
                         }
 
                         Item::Enarxcall(enarxcall, data) => {
+                            stats::enarxcall(enarxcall.num as usize);
                             sallyport::host::execute(
                                 sgx_enarxcall(enarxcall, data, self.keep.clone())?.into_iter(),
                             )
@@ -234,11 +270,20 @@ impl super::super::Thread for Thread {
                             },
                             ..,
                         ) if (*num == libc::SYS_exit_group as usize) => {
+                            stats::mark_console();
+                            stats::syscall(*num);
                             trace!("exit_group({code})");
+                            super::shared::finish();
                             std::process::exit(*code as _);
                         }
 
                         Item::Syscall(ref _syscall, ..) => {
+                            if _syscall.num == libc::SYS_write as usize
+                                && (_syscall.argv[0] == 1 || _syscall.argv[0] == 2)
+                            {
+                                stats::mark_console();
+                            }
+                            stats::syscall(_syscall.num);
                             #[cfg(feature = "dbg")]
                             match (
                                 _syscall.num as libc::c_long,

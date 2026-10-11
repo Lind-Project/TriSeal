@@ -14,6 +14,10 @@
 #![deny(missing_docs)]
 #![warn(rust_2018_idioms)]
 
+pub mod clock;
+pub mod committed;
+pub mod console;
+pub mod direct;
 pub mod entry;
 pub mod handler;
 pub mod heap;
@@ -41,7 +45,7 @@ pub const CSSA_1_PLUS_STACK_SIZE: usize =
 ///
 /// This is now 16GB, enough for wasmtime to allocate 8GB of memory for the wasm payload
 /// and still have some memory left for the shim and the stack.
-pub const ENCL_SIZE_BITS: u8 = 34;
+pub const ENCL_SIZE_BITS: u8 = 36;
 /// Defines the size of the enclave address space
 pub const ENCL_SIZE: usize = 1 << ENCL_SIZE_BITS;
 

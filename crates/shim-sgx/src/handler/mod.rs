@@ -27,40 +27,50 @@ pub(crate) mod gdb;
 pub(crate) mod key;
 pub(crate) mod usermem;
 
+use crate::console::CONSOLE;
 use crate::handler::usermem::UserMemScope;
 use crate::heap::{Access, Heap};
 use crate::thread::{
-    NewThread, NewThreadFromRegisters, Tcb, Tcs, ThreadMem, NEW_THREAD_QUEUE, THREADS_FREE,
-    THREAD_ID_CNT,
+    backoff, take_idle, NewThread, NewThreadFromRegisters, Tcb, Tcs, ThreadMem, NEW_THREAD_QUEUE,
+    POOL_PENDING, POOL_STARTED, POOL_THREADS, THREADS_FREE, THREAD_ID_CNT,
 };
+use crate::{clock, committed};
 use crate::{
-    shim_address, CSSA_0_STACK_SIZE, CSSA_1_PLUS_STACK_SIZE, DEBUG, ENARX_EXEC_END,
+    shim_address, BLOCK_SIZE, CSSA_0_STACK_SIZE, CSSA_1_PLUS_STACK_SIZE, DEBUG, ENARX_EXEC_END,
     ENARX_EXEC_START, ENCL_SIZE, NUM_SSA,
 };
 
 use core::arch::asm;
 use core::arch::x86_64::CpuidResult;
-use core::ffi::{c_int, c_size_t, c_ulong, c_void};
+use core::ffi::{c_int, c_long, c_size_t, c_ulong, c_void};
 use core::fmt::Write;
 use core::mem::size_of;
 use core::ops::Deref;
 use core::ptr::read_unaligned;
 use core::ptr::NonNull;
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 
 use mmledger::{Record, Region, Span};
 use primordial::{Address, Offset, Page};
-use sallyport::guest::{self, Handler as _, Platform, ThreadLocalStorage};
+use sallyport::guest::enarxcall::{CommitShm, MapHostShared, MapShm};
+use sallyport::guest::syscall::ClockGettime;
+use sallyport::guest::{self, syscall as sys, Handler as _, Platform, ThreadLocalStorage};
 use sallyport::item::enarxcall::sgx::{Report, ReportData, TargetInfo, TECH};
-use sallyport::item::enarxcall::{SYS_GETATT, SYS_GETKEY};
+use sallyport::item::enarxcall::{
+    shared, SYS_COMMITSHM, SYS_DIRECT_INIT, SYS_GETATT, SYS_GETKEY, SYS_MAPSHM, SYS_PHASE,
+    SYS_SALLY,
+};
 use sallyport::libc::{
-    off_t, pid_t, CloneFlags, SYS_clock_gettime, EACCES, EAGAIN, EINVAL, EIO, EMSGSIZE, ENOMEM,
-    ENOSYS, ENOTSUP, MAP_ANONYMOUS, MAP_PRIVATE, PROT_EXEC, PROT_READ, PROT_WRITE, STDERR_FILENO,
+    clockid_t, off_t, pid_t, timespec, CloneFlags, SYS_clock_gettime, SYS_futex, SYS_sched_yield,
+    CLOCK_MONOTONIC, EACCES, EAGAIN, EINTR, EINVAL, EIO, EMSGSIZE, ENOMEM, ENOSYS, ENOTSUP,
+    FUTEX_BITSET_MATCH_ANY, FUTEX_CLOCK_REALTIME, FUTEX_PRIVATE_FLAG, FUTEX_WAIT,
+    FUTEX_WAIT_BITSET, FUTEX_WAKE, FUTEX_WAKE_BITSET, MAP_ANONYMOUS, MAP_PRIVATE, PROT_EXEC,
+    PROT_READ, PROT_WRITE, STDERR_FILENO, STDOUT_FILENO,
 };
 use sallyport::Error;
 use sgx::page::{Class, Flags};
-use sgx::ssa::StateSaveArea;
 use sgx::ssa::Vector;
+use sgx::ssa::{GenPurposeRegs, StateSaveArea};
 use spin::{Lazy, RwLock};
 use x86_64::addr::VirtAddr;
 use x86_64::structures::idt::PageFaultErrorCode;
@@ -79,47 +89,154 @@ pub static HEAP: Lazy<RwLock<Heap>> = Lazy::new(|| {
     RwLock::new(Heap::new(span.start, span.count))
 });
 
+/// Whether the whole heap is mapped on the host. Once it is, the kernel adds
+/// (EAUG) a page when the enclave first touches it, and committing a page
+/// takes only an EACCEPTCOPY inside the enclave.
+static HEAP_HOST_MAPPED: AtomicBool = AtomicBool::new(false);
+
+/// Bumped by every futex wake. Waiters spin in the enclave until it or the
+/// futex word changes, instead of parking their thread on the host.
+static FUTEX_EPOCH: AtomicU64 = AtomicU64::new(0);
+
+/// Number of threads waiting on each futex word, so that a wake can report
+/// how many threads it reached.
+static FUTEX_WAITERS: spin::Mutex<[(usize, usize); 256]> = spin::Mutex::new([(0, 0); 256]);
+
+/// Address of the shim's entry point (`_start`), for new TCSs.
+static START: AtomicU64 = AtomicU64::new(0);
+
+/// Record the address of the shim's entry point.
+pub fn set_start(start: u64) {
+    START.store(start, Ordering::Relaxed);
+}
+
+/// The phase page shared with the host (0 until it is mapped).
+static PHASE_PAGE: AtomicU64 = AtomicU64::new(0);
+
+/// Size of the phase page and of the console memory shared with the host.
+/// They must match what the host maps (`src/backend/sgx/shared.rs`).
+const PHASE_SIZE: usize = 4096;
+const CONSOLE_SIZE: usize = 64 << 20;
+
+/// Words of the phase page (see `src/backend/sgx/shared.rs`).
+const PHASE_WATCH: usize = 0;
+const PHASE_MARK: usize = 1;
+const PHASE_ACK: usize = 2;
+const PHASE_AT_PHASE: usize = 8;
+const PHASE_AT_EXIT: usize = 16;
+
+/// What the shim did, counted in the enclave: the host cannot see the
+/// syscalls taken through the direct entry nor the pages committed ahead of
+/// use. They are copied to the phase page at each phase mark and at exit.
+mod count {
+    use core::sync::atomic::AtomicU64;
+    pub static DIRECT_SYSCALLS: AtomicU64 = AtomicU64::new(0);
+    pub static TRAP_SYSCALLS: AtomicU64 = AtomicU64::new(0);
+    pub static PAGE_FAULTS: AtomicU64 = AtomicU64::new(0);
+    pub static COMMITTED: AtomicU64 = AtomicU64::new(0);
+    pub static COMMITTED_AHEAD: AtomicU64 = AtomicU64::new(0);
+    pub static CPUID: AtomicU64 = AtomicU64::new(0);
+    pub static AHEAD_MPROTECT: AtomicU64 = AtomicU64::new(0);
+    pub static AHEAD_MADVISE: AtomicU64 = AtomicU64::new(0);
+    pub static ALL: [&AtomicU64; 8] = [
+        &DIRECT_SYSCALLS,
+        &TRAP_SYSCALLS,
+        &PAGE_FAULTS,
+        &COMMITTED,
+        &COMMITTED_AHEAD,
+        &CPUID,
+        &AHEAD_MPROTECT,
+        &AHEAD_MADVISE,
+    ];
+}
+
+/// Copy the counters to the phase page at word `at`.
+fn store_counters(at: usize) {
+    let page = PHASE_PAGE.load(Ordering::Acquire) as usize;
+    if page == 0 {
+        return;
+    }
+    for (i, c) in count::ALL.iter().enumerate() {
+        // Safety: the page was checked to lie outside the enclave when it
+        // was mapped and stays mapped.
+        let word = unsafe { &*((page + (at + i) * 8) as *const AtomicU64) };
+        word.store(c.load(Ordering::Relaxed), Ordering::Relaxed);
+    }
+}
+
+/// Mappings up to this size are committed when `mprotect()` makes them
+/// accessible. Of a larger one only the top [`COMMIT_TOP`] bytes are: a
+/// thread stack (lind's are 64 MiB, of which a thread uses little, since
+/// wasmtime limits the wasm stack) is used from the top down, and a wasm
+/// linear memory grown to its maximum at once is committed as the payload
+/// says it uses parts of it (`madvise(MADV_WILLNEED)`), or on first touch.
+const COMMIT_ON_MPROTECT_MAX: usize = 64 << 20;
+const COMMIT_TOP: usize = 8 << 20;
+
+/// An accessible `mmap()` up to this size (a buffer, code, a heap arena) is
+/// committed at once. A larger one is a wasm linear memory, which lind maps
+/// whole (4 GiB) and uses a little of: only its top [`COMMIT_TOP`] bytes are
+/// committed (lind keeps a futex page there), the rest as lind says it uses
+/// it.
+const COMMIT_ON_MMAP_MAX: usize = 1 << 30;
+
+const MADV_WILLNEED: c_int = 3;
+
+const ETIMEDOUT: c_int = 110;
+const CLOCK_REALTIME: clockid_t = 0;
+const CLOCK_MONOTONIC_RAW: clockid_t = 4;
+const CLOCK_REALTIME_COARSE: clockid_t = 5;
+const CLOCK_MONOTONIC_COARSE: clockid_t = 6;
+const CLOCK_BOOTTIME: clockid_t = 7;
+
+const NSEC_PER_SEC: u64 = 1_000_000_000;
+
+/// EPCM permissions of committed heap pages. Pages stay committed for the
+/// life of the keep and are reused for any mapping, so they are accepted as
+/// RWX once; the ledger keeps track of the protection each mapping asked for.
+const RWX: Flags =
+    Flags::from_bits_truncate(Flags::READ.bits() | Flags::WRITE.bits() | Flags::EXECUTE.bits());
+
+fn timespec_ns(t: &timespec) -> u64 {
+    (t.tv_sec as u64)
+        .saturating_mul(NSEC_PER_SEC)
+        .saturating_add(t.tv_nsec as u64)
+}
+
+fn futex_add_waiter(key: usize) -> sallyport::Result<()> {
+    let mut table = FUTEX_WAITERS.lock();
+    if let Some(slot) = table.iter_mut().find(|(k, _)| *k == key) {
+        slot.1 += 1;
+        return Ok(());
+    }
+    let slot = table.iter_mut().find(|(k, _)| *k == 0).ok_or(ENOMEM)?;
+    *slot = (key, 1);
+    Ok(())
+}
+
+fn futex_remove_waiter(key: usize) {
+    let mut table = FUTEX_WAITERS.lock();
+    if let Some(slot) = table.iter_mut().find(|(k, _)| *k == key) {
+        slot.1 -= 1;
+        if slot.1 == 0 {
+            slot.0 = 0;
+        }
+    }
+}
+
+fn futex_waiter_count(key: usize) -> usize {
+    FUTEX_WAITERS
+        .lock()
+        .iter()
+        .find(|(k, _)| *k == key)
+        .map_or(0, |(_, n)| *n)
+}
+
 // For `Handler::mmap_guest()`
 static ZERO: Page = Page::zeroed();
 
 fn is_prot_allowed(prot: c_int) -> bool {
     prot == PROT_READ || prot == (PROT_READ | PROT_WRITE) || prot == (PROT_READ | PROT_EXEC)
-}
-
-fn flags_from_access(access: Access) -> Flags {
-    let mut flags = Flags::empty();
-
-    if access.contains(Access::READ) {
-        flags |= Flags::READ;
-    }
-
-    if access.contains(Access::WRITE) {
-        flags |= Flags::WRITE;
-    }
-
-    if access.contains(Access::EXECUTE) {
-        flags |= Flags::EXECUTE;
-    }
-
-    flags
-}
-
-fn libc_from_access(access: Access) -> c_int {
-    let mut flags = 0;
-
-    if access.contains(Access::READ) {
-        flags |= PROT_READ;
-    }
-
-    if access.contains(Access::WRITE) {
-        flags |= PROT_WRITE;
-    }
-
-    if access.contains(Access::EXECUTE) {
-        flags |= PROT_EXEC;
-    }
-
-    flags
 }
 
 fn flags_from_libc(prot: c_int) -> Flags {
@@ -185,6 +302,8 @@ pub struct Handler<'a> {
     ssa: &'a mut StateSaveArea,
     tcb: &'a mut Tcb,
     start: u64,
+    /// Handling a syscall taken through the direct entry, at CSSA 0.
+    direct: bool,
 }
 
 impl<'a> Write for Handler<'a> {
@@ -195,7 +314,7 @@ impl<'a> Write for Handler<'a> {
         while written < len {
             //debugln!(self, "write tempest kill {:?}", written);
             written += self
-                .write(STDERR_FILENO, &buf[written..])
+                .write_host(STDERR_FILENO, &buf[written..])
                 .map_err(|_| core::fmt::Error)?;
         }
         Ok(())
@@ -207,15 +326,42 @@ impl guest::Handler for Handler<'_> {
         // prevent earlier writes from being moved beyond this point
         core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::Release);
 
-        unsafe {
-            // Safety: Enclave exit and re-enter should have left all registers intact.
-            asm!("syscall");
+        if self.direct {
+            // No exception got us here, so there is no handler for the host
+            // to finish: raise one. The handler entered for this `syscall`
+            // asks the host to run the request in the block, which CSSA 0
+            // and 1 share.
+            unsafe {
+                asm!("syscall", inlateout("rax") SYS_SALLY as u64 => _);
+            }
+        } else {
+            unsafe {
+                // Safety: Enclave exit and re-enter should have left all registers intact.
+                asm!("syscall");
+            }
         }
 
         // prevent later reads from being moved before this point
         core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::Acquire);
 
         Ok(())
+    }
+
+    fn debug_futex_wake(
+        &mut self,
+        uaddr: *const AtomicU32,
+        futex_op: c_int,
+        val: u32,
+        val3: u32,
+        current: u32,
+        waiters: usize,
+        wake_count: usize,
+    ) {
+        let tid = self.tcb.tid;
+        debugln!(
+            self,
+            "[{tid}] futex wake: uaddr={uaddr:p} op={futex_op:#x} val={val} val3={val3:#x} current={current} waiters={waiters} wake_count={wake_count}",
+        );
     }
 
     fn block(&self) -> &[usize] {
@@ -256,12 +402,8 @@ impl guest::Handler for Handler<'_> {
         let addr = heap.brk(addr);
 
         if addr > max {
-            self.mmap_host(
-                max.into_nonnull(),
-                addr.raw() - max.raw(),
-                PROT_READ | PROT_WRITE,
-            )?;
-            self.mmap_guest(max, addr - max, Flags::READ | Flags::WRITE);
+            self.map_heap_on_host(&heap);
+            self.mmap_guest(max, addr - max, RWX);
         }
 
         Ok(addr.into_nonnull())
@@ -304,11 +446,29 @@ impl guest::Handler for Handler<'_> {
             tls = tls.as_ptr()
         );
 
+        if !POOL_STARTED.swap(true, Ordering::SeqCst) {
+            self.start_thread_pool();
+        }
+
         let new_tid = THREAD_ID_CNT.fetch_add(1, Ordering::SeqCst);
 
         let mut regs = self.ssa.gpr;
         regs.rsp = stack.as_ptr() as _;
         regs.fsbase = tls.as_ptr() as _;
+
+        let new_thread = NewThread::Thread(NewThreadFromRegisters {
+            clear_on_exit: clear_on_exit as *const _ as _,
+            regs,
+            tid: new_tid,
+        });
+
+        // A thread is waiting in the enclave: give it the new thread instead
+        // of asking the host for one.
+        if take_idle() {
+            ptid.store(new_tid as _, Ordering::Relaxed);
+            NEW_THREAD_QUEUE.write().push(new_thread).unwrap();
+            return Ok(new_tid);
+        }
 
         let mut threads_free_guard = THREADS_FREE.write();
 
@@ -322,16 +482,9 @@ impl guest::Handler for Handler<'_> {
 
         drop(threads_free_guard);
 
-        NEW_THREAD_QUEUE
-            .write()
-            .push(NewThread::Thread(NewThreadFromRegisters {
-                clear_on_exit: clear_on_exit as *const _ as _,
-                regs,
-                tid: new_tid,
-            }))
-            .unwrap();
-
         ptid.store(new_tid as _, Ordering::Relaxed);
+
+        NEW_THREAD_QUEUE.write().push(new_thread).unwrap();
 
         let ret = self.spawn(addr);
         debugln!(self, "[{tid}] spawn() = {ret:#?}");
@@ -352,14 +505,7 @@ impl guest::Handler for Handler<'_> {
         }
 
         if self.tcb.return_to_main.rip != 0 {
-            self.ssa.gpr.rsp = self.tcb.return_to_main.rsp;
-            // The syscall handler will add 2 to rip to skip the syscall instruction (which we don't have anymore)
-            self.ssa.gpr.rip = self.tcb.return_to_main.rip - 2;
-            self.ssa.gpr.rbx = self.tcb.return_to_main.rbx;
-            self.ssa.gpr.rbp = self.tcb.return_to_main.rbp;
-            self.ssa.gpr.gsbase = self.tcb.return_to_main.gsbase;
-            self.ssa.gpr.fsbase = self.tcb.return_to_main.fsbase;
-            self.ssa.gpr.rcx = status as _;
+            self.return_to_main(status);
 
             debugln!(self, "[{tid}] exiting with status {status}",);
         } else {
@@ -373,10 +519,30 @@ impl guest::Handler for Handler<'_> {
     fn madvise(
         &mut self,
         _platform: &impl Platform,
-        _addr: NonNull<c_void>,
-        _length: c_size_t,
-        _advice: c_int,
+        addr: NonNull<c_void>,
+        length: c_size_t,
+        advice: c_int,
     ) -> sallyport::Result<()> {
+        // The payload will use these pages: commit them now, from the
+        // enclave, instead of on first touch through an exception.
+        if advice == MADV_WILLNEED {
+            let addr = addr.as_ptr() as usize;
+            if addr & 0xfff != 0 {
+                return Err(EINVAL);
+            }
+            let pages = (length + Page::SIZE - 1) / Page::SIZE;
+            if pages == 0 {
+                return Ok(());
+            }
+            let heap = HEAP.write();
+            let start = Address::new(addr);
+            let length = Offset::from_items(pages);
+            if heap.contains(start, length).is_none() {
+                return Err(ENOMEM);
+            }
+            let n = self.commit_ahead(&heap, start, length);
+            count::AHEAD_MADVISE.fetch_add(n as u64, Ordering::Relaxed);
+        }
         Ok(())
     }
 
@@ -401,9 +567,16 @@ impl guest::Handler for Handler<'_> {
             offset
         );
         let addr = addr.map(|v| v.as_ptr() as usize).unwrap_or(0);
+        // An accessible mapping is committed now; a reservation (PROT_NONE)
+        // only when parts of it are made accessible or used.
+        let commit = prot & (PROT_READ | PROT_WRITE | PROT_EXEC) != 0;
         // TODO: https://github.com/enarx/enarx/issues/1892
         let prot = prot | PROT_READ;
 
+        // MAP_NORESERVE (asked for by reservations, such as wasmtime's for
+        // linear memories) means nothing for enclave memory.
+        const MAP_NORESERVE: c_int = 0x4000;
+        let flags = flags & !MAP_NORESERVE;
         if addr != 0 || len == 0 || fd != -1 || offset != 0 || flags != MAP_PRIVATE | MAP_ANONYMOUS
         {
             return Err(ENOTSUP);
@@ -413,7 +586,19 @@ impl guest::Handler for Handler<'_> {
             return Err(EACCES);
         }
 
-        self.do_mmap(prot, len, MMapStrategy::Lazy)
+        let ret = self.do_mmap(prot, len, MMapStrategy::Lazy)?;
+        if commit {
+            let heap = HEAP.write();
+            let pages = (len + Page::SIZE - 1) / Page::SIZE;
+            let commit = if pages * Page::SIZE <= COMMIT_ON_MMAP_MAX {
+                pages
+            } else {
+                COMMIT_TOP / Page::SIZE
+            };
+            let start = ret.as_ptr() as usize + (pages - commit) * Page::SIZE;
+            self.commit_ahead(&heap, Address::new(start), Offset::from_items(commit));
+        }
+        Ok(ret)
     }
 
     fn mprotect(
@@ -425,7 +610,22 @@ impl guest::Handler for Handler<'_> {
     ) -> sallyport::Result<()> {
         let mut heap = HEAP.write();
 
-        self.mprotect_unlocked(&mut heap, addr, len, prot)
+        self.mprotect_unlocked(&mut heap, addr, len, prot)?;
+
+        // Commit a mapping made accessible now (a thread stack below its
+        // guard page, for instance) rather than on first touch.
+        let pages = (len + Page::SIZE - 1) / Page::SIZE;
+        if prot & (PROT_READ | PROT_WRITE | PROT_EXEC) != 0 {
+            let commit = if pages * Page::SIZE <= COMMIT_ON_MPROTECT_MAX {
+                pages
+            } else {
+                COMMIT_TOP / Page::SIZE
+            };
+            let start = addr.as_ptr() as usize + (pages - commit) * Page::SIZE;
+            let n = self.commit_ahead(&heap, Address::new(start), Offset::from_items(commit));
+            count::AHEAD_MPROTECT.fetch_add(n as u64, Ordering::Relaxed);
+        }
+        Ok(())
     }
 
     fn munmap(
@@ -437,6 +637,158 @@ impl guest::Handler for Handler<'_> {
         let mut heap = HEAP.write();
 
         self.munmap_unlocked(&mut heap, addr, length)
+    }
+
+    fn write(&mut self, fd: c_int, buf: &[u8]) -> sallyport::Result<c_size_t> {
+        // Console output is kept, in the enclave or in memory shared with
+        // the host, until exit.
+        if fd == STDOUT_FILENO || fd == STDERR_FILENO {
+            if CONSOLE.lock().push(fd as u8, buf) {
+                return Ok(buf.len());
+            }
+            self.flush_console();
+            if CONSOLE.lock().push(fd as u8, buf) {
+                return Ok(buf.len());
+            }
+        }
+        self.write_host(fd, buf)
+    }
+
+    fn exit_group(&mut self, status: c_int) -> sallyport::Result<()> {
+        // With the console in shared memory the host writes it out after
+        // the keep exits; otherwise write it now.
+        if !CONSOLE.lock().is_shared() {
+            self.flush_console();
+        }
+        store_counters(PHASE_AT_EXIT);
+        // Taken through the direct entry, at CSSA 0: return to the shim's
+        // thread loop like exit(), which leaves the enclave for good, marked
+        // for the host to exit the process, without an exception and a
+        // request to the host.
+        if self.direct && self.tcb.return_to_main.rip != 0 {
+            self.tcb.exit_group = Some(status);
+            self.return_to_main(status);
+            // Not Ok: sallyport takes an exit_group() that returns Ok as an
+            // attack. The registers set above are what the payload resumes
+            // with, so the error never reaches it.
+            return Err(EINTR);
+        }
+        self.execute(sys::ExitGroup { status })??;
+        self.attacked()
+    }
+
+    fn clock_gettime(&mut self, clockid: clockid_t, tp: &mut timespec) -> sallyport::Result<()> {
+        let realtime = match clockid {
+            CLOCK_REALTIME | CLOCK_REALTIME_COARSE => true,
+            CLOCK_MONOTONIC | CLOCK_MONOTONIC_RAW | CLOCK_MONOTONIC_COARSE | CLOCK_BOOTTIME => {
+                false
+            }
+            _ => return self.execute(ClockGettime { clockid, tp })?,
+        };
+        let ns = self.clock_ns(realtime);
+        tp.tv_sec = (ns / NSEC_PER_SEC) as _;
+        tp.tv_nsec = (ns % NSEC_PER_SEC) as _;
+        Ok(())
+    }
+
+    fn futex(
+        &mut self,
+        uaddr: &mut AtomicU32,
+        futex_op: c_int,
+        val: u32,
+        timespec: Option<&timespec>,
+        _uaddr2: Option<&mut AtomicU32>,
+        val3: u32,
+    ) -> sallyport::Result<c_long> {
+        let realtime = futex_op & FUTEX_CLOCK_REALTIME != 0;
+        let op = futex_op & !(FUTEX_PRIVATE_FLAG | FUTEX_CLOCK_REALTIME);
+        let key = uaddr as *const AtomicU32 as usize;
+
+        match op {
+            FUTEX_WAIT | FUTEX_WAIT_BITSET => {
+                if op == FUTEX_WAIT_BITSET && val3 != FUTEX_BITSET_MATCH_ANY {
+                    return Err(ENOTSUP);
+                }
+
+                // Deadline on the monotonic clock. FUTEX_WAIT takes a relative
+                // timeout, FUTEX_WAIT_BITSET an absolute one.
+                let deadline = match timespec {
+                    None => None,
+                    Some(t) if op == FUTEX_WAIT => {
+                        Some(self.clock_ns(false).saturating_add(timespec_ns(t)))
+                    }
+                    Some(t) if realtime => {
+                        let offset = self.clock_ns(true) - self.clock_ns(false);
+                        Some(timespec_ns(t).saturating_sub(offset))
+                    }
+                    Some(t) => Some(timespec_ns(t)),
+                };
+
+                // Read the epoch before checking the value: a wake that
+                // follows a change of the value then always changes it.
+                let epoch = FUTEX_EPOCH.load(Ordering::SeqCst);
+                if uaddr.load(Ordering::SeqCst) != val {
+                    return Err(EAGAIN);
+                }
+
+                futex_add_waiter(key)?;
+                let mut spins = 1;
+                let ret = loop {
+                    if uaddr.load(Ordering::SeqCst) != val
+                        || FUTEX_EPOCH.load(Ordering::SeqCst) != epoch
+                    {
+                        break Ok(0);
+                    }
+                    if let Some(deadline) = deadline {
+                        if clock::now_ns(false) >= deadline {
+                            break Err(ETIMEDOUT);
+                        }
+                    }
+                    spins = backoff(spins);
+                };
+                futex_remove_waiter(key);
+                ret
+            }
+            FUTEX_WAKE | FUTEX_WAKE_BITSET => {
+                if op == FUTEX_WAKE_BITSET && val3 == 0 {
+                    return Ok(0);
+                }
+                FUTEX_EPOCH.fetch_add(1, Ordering::SeqCst);
+                Ok(core::cmp::min(futex_waiter_count(key), val as usize) as c_long)
+            }
+            _ => Err(ENOTSUP),
+        }
+    }
+
+    fn park(
+        &mut self,
+        expected_val: c_int,
+        timeout: Option<&timespec>,
+    ) -> sallyport::Result<c_int> {
+        let deadline = timeout.map(timespec_ns);
+        let mut spins = 1;
+        loop {
+            let epoch = FUTEX_EPOCH.load(Ordering::SeqCst) as c_int;
+            if epoch != expected_val {
+                return Ok(epoch);
+            }
+            if let Some(deadline) = deadline {
+                if self.clock_ns(false) >= deadline {
+                    return Err(ETIMEDOUT);
+                }
+            }
+            spins = backoff(spins);
+        }
+    }
+
+    fn unpark(&mut self) -> sallyport::Result<()> {
+        FUTEX_EPOCH.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+
+    fn sched_yield(&mut self) -> sallyport::Result<()> {
+        core::hint::spin_loop();
+        Ok(())
     }
 
     fn set_tid_address(&mut self, tidptr: &mut c_int) -> sallyport::Result<pid_t> {
@@ -452,6 +804,29 @@ impl guest::Handler for Handler<'_> {
     }
 }
 
+/// Handle a syscall taken through the direct entry: run the #UD handler
+/// on the registers the entry saved, as if they were the state save area
+/// of a `syscall` instruction (see `crate::direct`).
+///
+/// # Safety
+///
+/// The GS base saved in `gpr` must be the calling thread's TCB, which
+/// must have a block.
+pub unsafe fn handle_direct(gpr: &mut GenPurposeRegs) {
+    let tcb = &mut *(gpr.gsbase as *mut Tcb);
+    let block =
+        core::slice::from_raw_parts_mut(tcb.block as *mut usize, BLOCK_SIZE / size_of::<usize>());
+    let mut ssa: StateSaveArea = core::mem::zeroed();
+    ssa.gpr = *gpr;
+    count::DIRECT_SYSCALLS.fetch_add(1, Ordering::Relaxed);
+    {
+        let mut h = Handler::new(&mut ssa, block, tcb, START.load(Ordering::Relaxed));
+        h.direct = true;
+        h.handle_syscall();
+    }
+    *gpr = ssa.gpr;
+}
+
 impl<'a> Handler<'a> {
     fn new(
         ssa: &'a mut StateSaveArea,
@@ -464,6 +839,7 @@ impl<'a> Handler<'a> {
             block,
             tcb,
             start,
+            direct: false,
         }
     }
 
@@ -480,6 +856,7 @@ impl<'a> Handler<'a> {
                 panic!();
             }
             Some(Vector::Page) => {
+                count::PAGE_FAULTS.fetch_add(1, Ordering::Relaxed);
                 if let Some(block) = block {
                     let mut h = Self::new(ssa, block, tcb, 0);
                     let error_code =
@@ -487,6 +864,14 @@ impl<'a> Handler<'a> {
                     let addr = h.ssa.misc.exinfo.maddr as usize;
                     if h.handle_page_fault(addr, error_code).is_ok() {
                         return;
+                    }
+                    {
+                        use core::fmt::Write;
+                        let rip = h.ssa.gpr.rip;
+                        let _ = writeln!(
+                            h,
+                            "[shim] UNHANDLED page fault addr {addr:#x} errcd {error_code:#?} rip {rip:#x} -> panic"
+                        );
                     }
                 }
                 // Page fault cannot be handled by the enclave without a block.
@@ -507,8 +892,14 @@ impl<'a> Handler<'a> {
 
         match h.ssa.vector() {
             Some(Vector::InvalidOpcode) => match unsafe { read_unaligned(h.ssa.gpr.rip as _) } {
-                OP_SYSCALL => h.handle_syscall(),
-                OP_CPUID => h.handle_cpuid(),
+                OP_SYSCALL => {
+                    count::TRAP_SYSCALLS.fetch_add(1, Ordering::Relaxed);
+                    h.handle_syscall()
+                }
+                OP_CPUID => {
+                    count::CPUID.fetch_add(1, Ordering::Relaxed);
+                    h.handle_cpuid()
+                }
                 r => {
                     debugln!(h, "unsupported opcode: {:#04x}", r);
                     h.print_ssa_stack_trace();
@@ -538,6 +929,7 @@ impl<'a> Handler<'a> {
             },
 
             Some(Vector::Page) => {
+                count::PAGE_FAULTS.fetch_add(1, Ordering::Relaxed);
                 let error_code =
                     PageFaultErrorCode::from_bits_truncate(h.ssa.misc.exinfo.errcd as u64);
                 if h.handle_page_fault(h.ssa.misc.exinfo.maddr as usize, error_code)
@@ -656,25 +1048,288 @@ impl<'a> Handler<'a> {
         Ok([len, TECH])
     }
 
+    /// Ask the host to map an open host file outside the enclave. The address
+    /// it returns is refused unless the whole mapping lies outside the
+    /// enclave: lind copies the dump archive into this memory, and a host
+    /// that pointed it at the enclave would have the enclave overwrite itself.
+    fn map_shm(&mut self, fd: c_int, length: usize, writable: bool) -> sallyport::Result<usize> {
+        if length == 0 {
+            return Err(EINVAL);
+        }
+        let addr = self.execute(MapShm {
+            fd,
+            length,
+            writable,
+        })??;
+        let encl_start = shim_address();
+        let encl_end = encl_start + ENCL_SIZE;
+        match addr.checked_add(length) {
+            Some(end) if addr != 0 && (end <= encl_start || addr >= encl_end) => Ok(addr),
+            _ => self.attacked(),
+        }
+    }
+
+    /// Have the payload thread return to the shim's thread loop with
+    /// `status` when the syscall is done.
+    fn return_to_main(&mut self, status: c_int) {
+        self.ssa.gpr.rsp = self.tcb.return_to_main.rsp;
+        // The syscall handler will add 2 to rip to skip the syscall instruction (which we don't have anymore)
+        self.ssa.gpr.rip = self.tcb.return_to_main.rip - 2;
+        self.ssa.gpr.rbx = self.tcb.return_to_main.rbx;
+        self.ssa.gpr.rbp = self.tcb.return_to_main.rbp;
+        self.ssa.gpr.gsbase = self.tcb.return_to_main.gsbase;
+        self.ssa.gpr.fsbase = self.tcb.return_to_main.fsbase;
+        self.ssa.gpr.rcx = status as _;
+    }
+
+    /// Map anonymous host memory for `kind`, refusing an address that is
+    /// not entirely outside the enclave.
+    fn map_host_shared(&mut self, kind: usize, length: usize) -> sallyport::Result<usize> {
+        let addr = self.execute(MapHostShared { kind, length })??;
+        let encl_start = shim_address();
+        let encl_end = encl_start + ENCL_SIZE;
+        match addr.checked_add(length) {
+            Some(end) if addr != 0 && (end <= encl_start || addr >= encl_end) => Ok(addr),
+            _ => self.attacked(),
+        }
+    }
+
+    /// Set up the memory shared with the host for the console and the phase
+    /// page, once, and return the address of the direct syscall entry, or 0
+    /// if this thread has no block (an older host) and so cannot use it.
+    fn direct_init(&mut self) -> usize {
+        if PHASE_PAGE.load(Ordering::Acquire) == 0 {
+            if let Ok(addr) = self.map_host_shared(shared::PHASE, PHASE_SIZE) {
+                PHASE_PAGE.store(addr as u64, Ordering::Release);
+            }
+            if let Ok(addr) = self.map_host_shared(shared::CONSOLE, CONSOLE_SIZE) {
+                CONSOLE.lock().share(addr, CONSOLE_SIZE);
+            }
+        }
+        if self.tcb.block == 0 {
+            return 0;
+        }
+        crate::direct::enarx_direct_entry as usize
+    }
+
+    /// The payload entered phase `n`: copy the counters to the phase page
+    /// and set the mark. If the host watches the page, wait (up to a second)
+    /// for it to acknowledge the mark, so that it counts from this point.
+    fn phase(&mut self, n: u64) {
+        let page = PHASE_PAGE.load(Ordering::Acquire) as usize;
+        if page == 0 {
+            return;
+        }
+        let word = |i: usize| unsafe { &*((page + i * 8) as *const AtomicU64) };
+        store_counters(PHASE_AT_PHASE);
+        word(PHASE_MARK).store(n, Ordering::SeqCst);
+        if word(PHASE_WATCH).load(Ordering::SeqCst) != 0 {
+            let deadline = self.clock_ns(false) + NSEC_PER_SEC;
+            let mut spins = 1;
+            while word(PHASE_ACK).load(Ordering::SeqCst) != n && clock::now_ns(false) < deadline {
+                spins = backoff(spins);
+            }
+        }
+    }
+
+    /// Commit the pages of `[addr, addr + length)` that are not committed
+    /// yet, from the enclave: the kernel adds each page (EAUG) when
+    /// EACCEPTCOPY first touches it, which the kernel resolves by itself
+    /// without the host entering the enclave.
+    fn commit_ahead(
+        &mut self,
+        heap: &Heap,
+        addr: Address<usize, Page>,
+        length: Offset<usize, Page>,
+    ) -> usize {
+        self.map_heap_on_host(heap);
+        let n = self.mmap_guest(addr, length, RWX);
+        count::COMMITTED_AHEAD.fetch_add(n as u64, Ordering::Relaxed);
+        n
+    }
+
+    /// Write to a host file descriptor, bypassing the console buffer.
+    fn write_host(&mut self, fd: c_int, buf: &[u8]) -> sallyport::Result<c_size_t> {
+        self.execute(sys::Write { fd, buf })?
+            .unwrap_or_else(|| self.attacked())
+    }
+
+    /// Write the buffered console output to the host.
+    fn flush_console(&mut self) {
+        let mut console = CONSOLE.lock();
+        console.drain(|fd, mut data| {
+            while !data.is_empty() {
+                match self.write_host(fd as c_int, data) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => data = &data[n..],
+                }
+            }
+        });
+    }
+
+    /// Nanoseconds of the real-time or monotonic clock, from the TSC.
+    fn clock_ns(&mut self, realtime: bool) -> u64 {
+        if !clock::ready() {
+            self.clock_init();
+        }
+        clock::now_ns(realtime)
+    }
+
+    /// Anchor the TSC clock to the host clock. This is the only time the
+    /// clock asks the host; it happens on the first clock read or when the
+    /// thread pool starts, during keep startup.
+    fn clock_init(&mut self) {
+        let host = |h: &mut Self, clockid| {
+            let mut t = timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            };
+            h.execute(ClockGettime {
+                clockid,
+                tp: &mut t,
+            })
+            .and_then(|r| r)
+            .unwrap_or_else(|_| h.attacked());
+            timespec_ns(&t)
+        };
+
+        // TSC frequency: CPUID leaf 0x15 if it reports one, otherwise
+        // measured against the host's monotonic clock over ~20 ms.
+        let mut leaf = CpuidResult {
+            eax: 0,
+            ebx: 0,
+            ecx: 0,
+            edx: 0,
+        };
+        let hz = if self.cpuid(0x15, 0, &mut leaf).is_ok()
+            && leaf.eax != 0
+            && leaf.ebx != 0
+            && leaf.ecx != 0
+        {
+            leaf.ecx as u64 * leaf.ebx as u64 / leaf.eax as u64
+        } else {
+            let t0 = host(self, CLOCK_MONOTONIC);
+            let c0 = clock::rdtsc();
+            while clock::rdtsc() - c0 < 50_000_000 {
+                core::hint::spin_loop();
+            }
+            let t1 = host(self, CLOCK_MONOTONIC);
+            let c1 = clock::rdtsc();
+            ((c1 - c0) as u128 * NSEC_PER_SEC as u128 / (t1 - t0) as u128) as u64
+        };
+
+        let monotonic = host(self, CLOCK_MONOTONIC);
+        let realtime = host(self, CLOCK_REALTIME);
+        clock::init(hz, clock::rdtsc(), monotonic, realtime);
+        debugln!(self, "clock: TSC {hz} Hz");
+    }
+
+    /// Start the threads that wait in the enclave for `clone()`, and anchor
+    /// the clock, while the keep is still starting up.
+    fn start_thread_pool(&mut self) {
+        if !clock::ready() {
+            self.clock_init();
+        }
+        for _ in 0..POOL_THREADS {
+            let tcs = match self.thread_mem_alloc() {
+                Ok(tcs) => tcs as usize,
+                Err(_) => break,
+            };
+            POOL_PENDING.fetch_add(1, Ordering::SeqCst);
+            if self.spawn(tcs).is_err() {
+                POOL_PENDING.fetch_sub(1, Ordering::SeqCst);
+                break;
+            }
+        }
+    }
+
     fn handle_syscall(&mut self) {
         let orig_rdx = self.ssa.gpr.rdx;
         let nr = self.ssa.gpr.rax as usize;
         let tid = self.tcb.tid;
+        let futex_args = if nr == SYS_futex as usize {
+            Some((
+                self.ssa.gpr.rdi,
+                self.ssa.gpr.rsi,
+                self.ssa.gpr.rdx,
+                self.ssa.gpr.r10,
+                self.ssa.gpr.r8,
+                self.ssa.gpr.r9,
+            ))
+        } else {
+            None
+        };
 
         // reduce log spam
-        if nr != SYS_clock_gettime as _ {
+        if nr != SYS_clock_gettime as _ && nr != SYS_sched_yield as _ {
             debugln!(self, "[{tid}] syscall {nr} ...");
+        }
+        if let Some((uaddr, op, val, timeout, uaddr2, val3)) = futex_args {
+            debugln!(
+                self,
+                "[{tid}] futex enter: uaddr={:#x} op={:#x} val={} timeout={:#x} uaddr2={:#x} val3={:#x}",
+                uaddr,
+                op,
+                val,
+                timeout,
+                uaddr2,
+                val3
+            );
         }
 
         let usermemscope = UserMemScope;
 
         match nr as i64 {
+            SYS_SALLY => {
+                // A syscall that came through the direct entry needs the
+                // host: its request is in the block already.
+                let _ = self.sally();
+                self.ssa.gpr.rax = 0;
+            }
+            SYS_DIRECT_INIT => {
+                self.ssa.gpr.rax = self.direct_init() as u64;
+                self.ssa.gpr.rdx = orig_rdx;
+            }
+            SYS_PHASE => {
+                self.phase(self.ssa.gpr.rdi);
+                self.ssa.gpr.rax = 0;
+                self.ssa.gpr.rdx = orig_rdx;
+            }
             SYS_GETKEY => {
                 let ret = self.get_key(&usermemscope, self.ssa.gpr.rdi as _, self.ssa.gpr.rsi as _);
                 match ret {
                     Err(e) => self.ssa.gpr.rax = -e as u64,
                     Ok(rax) => {
                         self.ssa.gpr.rax = rax as u64;
+                        self.ssa.gpr.rdx = orig_rdx;
+                    }
+                }
+            }
+            SYS_MAPSHM => {
+                let ret = self.map_shm(
+                    self.ssa.gpr.rdi as c_int,
+                    self.ssa.gpr.rsi as usize,
+                    self.ssa.gpr.rdx != 0,
+                );
+                match ret {
+                    Err(e) => self.ssa.gpr.rax = -e as u64,
+                    Ok(addr) => {
+                        self.ssa.gpr.rax = addr as u64;
+                        self.ssa.gpr.rdx = orig_rdx;
+                    }
+                }
+            }
+            SYS_COMMITSHM => {
+                let ret = self
+                    .execute(CommitShm {
+                        fd: self.ssa.gpr.rdi as c_int,
+                        length: self.ssa.gpr.rsi as usize,
+                    })
+                    .and_then(|r| r);
+                match ret {
+                    Err(e) => self.ssa.gpr.rax = -e as u64,
+                    Ok(()) => {
+                        self.ssa.gpr.rax = 0;
                         self.ssa.gpr.rdx = orig_rdx;
                     }
                 }
@@ -725,8 +1380,21 @@ impl<'a> Handler<'a> {
         self.ssa.gpr.rip += 2;
 
         // reduce log spam
-        if nr != SYS_clock_gettime as _ {
+        if nr != SYS_clock_gettime as _ && nr != SYS_sched_yield as _ {
             debugln!(self, "[{tid}] syscall {nr} = {}", self.ssa.gpr.rax as isize);
+        }
+        if let Some((uaddr, op, val, timeout, uaddr2, val3)) = futex_args {
+            debugln!(
+                self,
+                "[{tid}] futex exit: uaddr={:#x} op={:#x} val={} timeout={:#x} uaddr2={:#x} val3={:#x} ret={}",
+                uaddr,
+                op,
+                val,
+                timeout,
+                uaddr2,
+                val3,
+                self.ssa.gpr.rax as isize
+            );
         }
     }
 
@@ -808,12 +1476,7 @@ impl<'a> Handler<'a> {
             self.attacked()
         }
 
-        if let Err(e) = self.mmap_host(addr.into_nonnull(), length.bytes(), PROT_READ | PROT_WRITE)
-        {
-            debugln!(self, "ERROR mmap_host() = {e:#?}");
-            self.attacked()
-        }
-
+        self.map_heap_on_host(&heap);
         self.mmap_guest(addr, length, flags_from_libc(prot));
 
         // If the previous operations succeeded, the virtual memory area
@@ -828,21 +1491,28 @@ impl<'a> Handler<'a> {
         Ok(ret)
     }
 
-    /// Acknowledge pages committed by the host with ENCLS[EAUG].
+    /// Commit pages: accept the pages the host adds with ENCLS[EAUG] on first
+    /// touch. Pages that are already committed are left alone; `munmap()`
+    /// zeroed them when they were last unmapped.
     fn mmap_guest(
         &mut self,
         addr: Address<usize, Page>,
         length: Offset<usize, Page>,
         flags: Flags,
-    ) {
+    ) -> usize {
         let zero_virt_addr = VirtAddr::new(ZERO.as_ptr() as u64);
         // # Safety
         //
         // The address must be page aligned.
         let zero_page_addr = unsafe { PageAddr::from_start_address_unchecked(zero_virt_addr) };
 
+        let mut committed_now = 0;
         for i in 0..length.items() {
-            let virt_addr = VirtAddr::new((addr.raw() + i * Page::SIZE) as u64);
+            let raw = addr.raw() + i * Page::SIZE;
+            if committed::contains(raw) {
+                continue;
+            }
+            let virt_addr = VirtAddr::new(raw as u64);
             // # Safety
             //
             // The address must be page aligned.
@@ -852,7 +1522,29 @@ impl<'a> Handler<'a> {
                 .info(flags)
                 .accept_copy(page_addr, zero_page_addr)
                 .unwrap_or_else(|_| self.attacked());
+            committed::insert(raw);
+            committed_now += 1;
         }
+        count::COMMITTED.fetch_add(committed_now as u64, Ordering::Relaxed);
+        committed_now
+    }
+
+    /// Map the whole heap on the host, once, so that committing a page
+    /// later needs no host call.
+    fn map_heap_on_host(&mut self, heap: &Heap) {
+        if HEAP_HOST_MAPPED.load(Ordering::Acquire) {
+            return;
+        }
+        let span = heap.span();
+        if let Err(e) = self.mmap_host(
+            span.start.into_nonnull(),
+            (span.end - span.start).bytes(),
+            PROT_READ | PROT_WRITE | PROT_EXEC,
+        ) {
+            debugln!(self, "ERROR mmap_host(heap) = {e:#?}");
+            self.attacked()
+        }
+        HEAP_HOST_MAPPED.store(true, Ordering::Release);
     }
 
     fn mprotect_unlocked(
@@ -906,48 +1598,13 @@ impl<'a> Handler<'a> {
             }
         }
 
+        // Committed pages are RWX in the EPCM and on the host, so a change of
+        // protection is recorded in the ledger only.
         heap.protect_with(addr, length, |record| {
             debugln!(self, "mprotect_unlocked working on ({record:#?})");
-            if record.access.contains(Access::MMAPPED) {
-                if access != record.access {
-                    let region = &record.region;
-                    let addr = region.start.into_nonnull();
-                    let length = (region.end - region.start).bytes();
-                    let pages = (region.end - region.start).items();
-
-                    self.mprotect_host(addr, length, prot)
-                        .unwrap_or_else(|err| {
-                            debugln!(
-                                self,
-                                "mprotect_unlocked mprotect_host failed access={access:#?} record.access={raccess:#?} ({record:#?}) = {err:#?}",
-                                raccess=record.access,
-                            );
-                            self.attacked();
-                        });
-
-                    for i in 0..pages {
-                        let virt_addr =
-                            VirtAddr::new((region.start + Offset::from_items(i)).as_ptr() as u64);
-                        // Safety: The address is guaranteed to be page aligned, because
-                        // `addr` was checked to be page aligned and only a multiple of
-                        // pages was added.
-                        let page_addr =
-                            unsafe { PageAddr::from_start_address_unchecked(virt_addr) };
-
-                        // TODO: https://github.com/enarx/enarx/issues/1892
-                        Class::Regular
-                            .info(Flags::READ | Flags::RESTRICTED)
-                            .accept(page_addr)
-                            .unwrap_or_else(|_| self.attacked());
-
-                        Class::Regular.info(flags_from_libc(prot)).extend(page_addr);
-                    }
-                }
-                access | Access::MMAPPED
-            } else {
-                access
-            }
-        }).unwrap_or_else(|e| {
+            access | (record.access & Access::MMAPPED)
+        })
+        .unwrap_or_else(|e| {
             debugln!(self, "mprotect_unlocked heap.protect_with failed: {:?}", e);
             self.attacked();
         });
@@ -976,50 +1633,83 @@ impl<'a> Handler<'a> {
             return Ok(());
         }
 
-        // Process the ledger first, before doing anything else, because it can
-        // legitly fail when running out of resources.
+        // Committed pages are not given back to the host: zero them, so that
+        // the next mapping of the address starts clean, and keep them.
         heap.munmap_with(addr, length, move |record: &Record<Access>| {
             debugln!(self, "[{tid}] sgx_unmap({:#?}", record);
 
-            if !record.access.contains(Access::MMAPPED) {
-                // if not MMAPPED, we don't have to do anything
-                return;
+            committed::for_each(record.region.start.raw(), record.region.end.raw(), |page| {
+                // Safety: the page is committed and belongs to the mapping
+                // being removed.
+                unsafe { core::ptr::write_bytes(page as *mut u8, 0, Page::SIZE) };
+            });
+        })
+        .map_err(|_| ENOMEM)?;
+
+        Ok(())
+    }
+
+    /// Unmap pages and give them back to the host (trim), so that touching
+    /// them faults. Used for the stack guard pages of new threads, which are
+    /// set up when the thread pool starts.
+    fn trim_unlocked(
+        &mut self,
+        heap: &mut Heap,
+        addr_in: NonNull<c_void>,
+        length_in: c_size_t,
+    ) -> sallyport::Result<()> {
+        let tid = self.tcb.tid;
+        let addr = addr_in.as_ptr() as usize;
+        let pages = ((length_in + Page::SIZE - 1) & !(Page::SIZE - 1)) / Page::SIZE;
+
+        if addr & 0xfff != 0 || pages == 0 {
+            return Err(EINVAL);
+        }
+
+        let addr = Address::new(addr);
+        let length = Offset::from_items(pages);
+
+        heap.munmap(addr, length).map_err(|_| ENOMEM)?;
+
+        for i in 0..pages {
+            let raw = addr.raw() + i * Page::SIZE;
+            if !committed::contains(raw) {
+                continue;
             }
+            let page = NonNull::new(raw as *mut c_void).unwrap();
 
-            let region = &record.region;
-            let addr = region.start.into_nonnull();
-            let length = (region.end - region.start).bytes();
-            let pages = (region.end - region.start).items();
-
-            // On the other hand, failing in any of these operations is expected to
-            // crash the enclave because it is due either to a software bug, or a
+            // Failing in any of these operations is expected to crash the
+            // enclave because it is due either to a software bug, or a
             // malicious host.
-            if let Err(e) = self.modify_sgx_page_type(addr, length, Class::Trimmed as _) {
+            if let Err(e) = self.modify_sgx_page_type(page, Page::SIZE, Class::Trimmed as _) {
                 debugln!(
                     self,
-                    "[{tid}] ERROR munmap: modify_sgx_page_type FAILED !!! {e:?}"
+                    "[{tid}] ERROR trim: modify_sgx_page_type FAILED !!! {e:?}"
                 );
                 self.attacked();
             }
 
-            for i in 0..pages {
-                let virt_addr =
-                    VirtAddr::new((region.start + Offset::from_items(i)).as_ptr() as u64);
-                // # Safety
-                //
-                // The address must be page aligned.
-                let page_addr = unsafe { PageAddr::from_start_address_unchecked(virt_addr) };
+            // # Safety
+            //
+            // The address is page aligned.
+            let page_addr =
+                unsafe { PageAddr::from_start_address_unchecked(VirtAddr::new(raw as u64)) };
+            Class::Trimmed
+                .info(Flags::MODIFIED)
+                .accept(page_addr)
+                .unwrap_or_else(|_| self.attacked());
 
-                Class::Trimmed
-                    .info(Flags::MODIFIED)
-                    .accept(page_addr)
+            // Remove the page, then map the address on the host again: the
+            // heap stays mapped as a whole, so that the address can be
+            // committed again later without a host call.
+            self.munmap_host(page, Page::SIZE)
+                .unwrap_or_else(|_| self.attacked());
+            if HEAP_HOST_MAPPED.load(Ordering::Acquire) {
+                self.mmap_host(page, Page::SIZE, PROT_READ | PROT_WRITE | PROT_EXEC)
                     .unwrap_or_else(|_| self.attacked());
             }
-
-            self.munmap_host(addr, length)
-                .unwrap_or_else(|_| self.attacked());
-        })
-        .map_err(|_| ENOMEM)?;
+            committed::remove(raw);
+        }
 
         Ok(())
     }
@@ -1091,8 +1781,6 @@ impl<'a> Handler<'a> {
     }
 
     fn thread_mem_alloc(&mut self) -> sallyport::Result<*const Tcs> {
-        let usermemscope = UserMemScope;
-
         // Allocate the whole block of memory used for the thread.
         // It is easier to do this in one go and punch holes in it,
         // than to allocate each part separately.
@@ -1121,10 +1809,23 @@ impl<'a> Handler<'a> {
         tm.tcs.oentry = self.start - shim_address() as u64;
 
         // unmap stack guard pages, so a stack overflow will cause a page fault
-        self.munmap(&usermemscope, stack_end_1, Page::SIZE)
-            .unwrap_or_else(|_| self.attacked());
-        self.munmap(&usermemscope, stack_end_0, Page::SIZE)
-            .unwrap_or_else(|_| self.attacked());
+        {
+            let mut heap = HEAP.write();
+            self.trim_unlocked(&mut heap, stack_end_1, Page::SIZE)
+                .unwrap_or_else(|_| self.attacked());
+            self.trim_unlocked(&mut heap, stack_end_0, Page::SIZE)
+                .unwrap_or_else(|_| self.attacked());
+        }
+
+        // The heap is mapped RWX on the host, but the kernel only maps a TCS
+        // page into a VMA without execute permission: give the page its
+        // own read-write mapping before it becomes a TCS.
+        self.mmap_host(
+            NonNull::new(tcs as *mut c_void).unwrap(),
+            Page::SIZE,
+            PROT_READ | PROT_WRITE,
+        )
+        .unwrap_or_else(|_| self.attacked());
 
         self.modify_sgx_page_type(
             NonNull::new(tcs as *mut c_void).unwrap(),
@@ -1171,26 +1872,37 @@ impl<'a> Handler<'a> {
         let tid = self.tcb.tid;
         let addr = addr & !(Page::SIZE - 1);
 
-        debugln!(self, "[{tid}] handle_page_fault: {addr:#x} {error_code:?}");
+        // debugln!(self, "[{tid}] handle_page_fault: {addr:#x} {error_code:?}");
 
         // check for non-valid flags
+        //
+        // PROTECTION_VIOLATION|SGX is accepted here: it is what a thread sees
+        // when it touches a page whose EPCM permissions are mid-transition
+        // (another thread's mprotect EMODPR/EACCEPT/EMODPE window, or a
+        // concurrent first-touch commit). Those faults are resolved further
+        // down by serializing on the HEAP lock and retrying.
         if !error_code
             .difference(
                 PageFaultErrorCode::CAUSED_BY_WRITE
                     | PageFaultErrorCode::INSTRUCTION_FETCH
-                    | PageFaultErrorCode::USER_MODE,
+                    | PageFaultErrorCode::USER_MODE
+                    | PageFaultErrorCode::PROTECTION_VIOLATION
+                    | PageFaultErrorCode::SGX,
             )
             .is_empty()
         {
-            debugln!(
-                self,
-                "[{tid}] handle_page_fault: difference {:#?}",
-                error_code.difference(
-                    PageFaultErrorCode::CAUSED_BY_WRITE
-                        | PageFaultErrorCode::INSTRUCTION_FETCH
-                        | PageFaultErrorCode::USER_MODE,
-                )
-            );
+            {
+                use core::fmt::Write;
+                let _ = writeln!(
+                    self,
+                    "[shim {tid}] page fault REJECTED addr {addr:#x} difference {:#?}",
+                    error_code.difference(
+                        PageFaultErrorCode::CAUSED_BY_WRITE
+                            | PageFaultErrorCode::INSTRUCTION_FETCH
+                            | PageFaultErrorCode::USER_MODE,
+                    )
+                );
+            }
 
             return Err(());
         }
@@ -1207,72 +1919,72 @@ impl<'a> Handler<'a> {
 
         let access = match heap.contains(addr, length) {
             None => {
-                debugln!(
-                    self,
-                    "[{tid}] handle_page_fault: access empty {:#?}",
-                    Region::new(addr, addr + length),
-                );
+                {
+                    use core::fmt::Write;
+                    let _ = writeln!(
+                        self,
+                        "[shim {tid}] page fault: ledger access empty {:#?} errcd {error_code:#?}",
+                        Region::new(addr, addr + length),
+                    );
+                }
                 panic!();
             }
             Some(access) => {
+                let access_covers_fault = access.contains(Access::READ)
+                    && (!error_code.contains(PageFaultErrorCode::CAUSED_BY_WRITE)
+                        || access.contains(Access::WRITE))
+                    && (!error_code.contains(PageFaultErrorCode::INSTRUCTION_FETCH)
+                        || access.contains(Access::READ | Access::EXECUTE));
+
                 // check for real page fault
-                if !access.contains(Access::READ)
-                    || (error_code.contains(PageFaultErrorCode::CAUSED_BY_WRITE)
-                        && !access.contains(Access::WRITE))
-                    || (error_code.contains(PageFaultErrorCode::INSTRUCTION_FETCH)
-                        && !access.contains(Access::READ | Access::EXECUTE))
-                {
-                    debugln!(
-                        self,
-                        "[{tid}] handle_page_fault: real page fault previous access {:#?}",
-                        Record {
-                            region: Region::new(addr, addr + length),
-                            access
-                        }
-                    );
+                if !access_covers_fault {
+                    {
+                        use core::fmt::Write;
+                        let _ = writeln!(
+                            self,
+                            "[shim {tid}] REAL page fault errcd {error_code:#?} previous access {:#?}",
+                            Record {
+                                region: Region::new(addr, addr + length),
+                                access
+                            }
+                        );
+                    }
                     panic!();
                 }
                 access
             }
         };
 
-        if heap.mmap(Some(addr), length, access | Access::MMAPPED) != Some(addr) {
-            debugln!(
-                self,
-                "[{tid}] handle_page_fault: MMAPPED heap is inconsistent"
-            );
-            panic!();
+        // Another thread committed the page while this one waited for HEAP.
+        if committed::contains(addr.raw()) {
+            return Ok(());
         }
 
-        if let Err(e) = self.mmap_host(addr.into_nonnull(), length.bytes(), PROT_READ | PROT_WRITE)
-        {
-            debugln!(
-                self,
-                "[{tid}] handle_page_fault: ERROR mmap_host() = {e:#?}"
-            );
-            panic!();
-        }
-
-        self.mmap_guest(addr, length, flags_from_access(access));
-
-        // If the previous operations succeeded, the virtual memory area
-        // (VMA) is already RW.
-        if access != (Access::READ | Access::WRITE) {
-            let ret = addr.into_nonnull();
-
-            if let Err(e) = self.mprotect_unlocked(
-                &mut heap,
-                ret,
-                length.bytes() as c_size_t,
-                libc_from_access(access),
-            ) {
-                debugln!(
-                    self,
-                    "[{tid}] handle_page_fault: ERROR mprotect_unlocked() = {e:#?}"
-                );
-                panic!();
+        // Commit up to 64 pages of the mapping per fault instead of exactly
+        // one, stopping at the first page that is already committed.
+        let mut length = Offset::from_items(1);
+        if let Some((region, _)) = heap.record_at(addr) {
+            let max = (region.end - addr).items().min(64);
+            let mut pages = 1;
+            while pages < max && !committed::contains(addr.raw() + pages * Page::SIZE) {
+                pages += 1;
             }
+            length = Offset::from_items(pages);
         }
+
+        if heap.mmap(Some(addr), length, access | Access::MMAPPED) != Some(addr) {
+            {
+                use core::fmt::Write;
+                let _ = writeln!(
+                    self,
+                    "[shim {tid}] page fault: MMAPPED heap is inconsistent at {addr:#?}"
+                );
+            }
+            panic!();
+        }
+
+        self.map_heap_on_host(&heap);
+        self.mmap_guest(addr, length, RWX);
 
         Ok(())
     }

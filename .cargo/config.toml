@@ -12,6 +12,9 @@ rustflags = [
     "--cfg", "polyval_force_soft",
     "--cfg", "aes_force_soft",
     "--cfg", "mio_unsupported_force_poll_poll",
+    # rustix makes its own syscalls by default; through libc they take the
+    # SGX shim's direct entry (crates/exec-wasmtime/musl)
+    "--cfg", "rustix_use_libc",
 ]
 
 
