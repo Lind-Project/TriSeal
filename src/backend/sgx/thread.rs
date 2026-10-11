@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::enarxcall::sgx_enarxcall;
+use super::stats;
 #[cfg(feature = "gdb")]
 use crate::backend::execute_gdb;
 use crate::backend::Command;
@@ -10,6 +11,7 @@ use std::iter;
 use std::mem::{size_of, MaybeUninit};
 #[cfg(feature = "gdb")]
 use std::net::TcpStream;
+use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
 use std::{io, ptr};
 
@@ -77,9 +79,12 @@ impl super::super::Keep for super::Keep {
 
 impl super::super::Thread for Thread {
     fn enter(&mut self, _gdblisten: &Option<String>) -> Result<Command> {
+        stats::init();
+
         let mut run: Run = unsafe { MaybeUninit::zeroed().assume_init() };
         run.tcs = self.tcs as u64;
         let how = self.how;
+        stats::entry(how);
         let exit_status: u64;
         use x86_64::registers::segmentation::Segment64;
         use x86_64::registers::segmentation::{FS, GS};
@@ -132,6 +137,7 @@ impl super::super::Thread for Thread {
         debug_assert_eq!(oldgs, GS::read_base().as_u64());
 
         let exit_status = exit_status as i32;
+        stats::exit(run.function as usize, run.vector);
 
         self.how = match run.function as usize {
             EENTER | ERESUME if run.vector == Vector::InvalidOpcode => EENTER,
@@ -198,10 +204,12 @@ impl super::super::Thread for Thread {
             self.entered_for.get(self.cssa + 1).copied().flatten() == Some(Vector::InvalidOpcode);
         if (self.cssa == 1 || self.cssa == 2) && sallied {
             if let (EENTER, ERESUME) = (how, self.how) {
+                stats::SALLYPORT_BATCHES.fetch_add(1, Relaxed);
                 let block: Block = self.block[self.cssa - 1].as_mut_slice().into();
                 for item in block {
                     match item {
                         Item::Gdbcall(_gdbcall, _data) => {
+                            stats::GDBCALLS.fetch_add(1, Relaxed);
                             #[cfg(feature = "gdb")]
                             unsafe {
                                 execute_gdb(
@@ -216,6 +224,7 @@ impl super::super::Thread for Thread {
                         }
 
                         Item::Enarxcall(enarxcall, data) => {
+                            stats::enarxcall(enarxcall.num as usize);
                             sallyport::host::execute(
                                 sgx_enarxcall(enarxcall, data, self.keep.clone())?.into_iter(),
                             )
@@ -249,11 +258,19 @@ impl super::super::Thread for Thread {
                             },
                             ..,
                         ) if (*num == libc::SYS_exit_group as usize) => {
+                            stats::mark_console();
+                            stats::syscall(*num);
                             trace!("exit_group({code})");
                             std::process::exit(*code as _);
                         }
 
                         Item::Syscall(ref _syscall, ..) => {
+                            if _syscall.num == libc::SYS_write as usize
+                                && (_syscall.argv[0] == 1 || _syscall.argv[0] == 2)
+                            {
+                                stats::mark_console();
+                            }
+                            stats::syscall(_syscall.num);
                             #[cfg(feature = "dbg")]
                             match (
                                 _syscall.num as libc::c_long,

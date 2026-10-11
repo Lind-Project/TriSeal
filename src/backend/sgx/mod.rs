@@ -7,6 +7,7 @@ mod data;
 mod enarxcall;
 mod hasher;
 mod ioctls;
+pub mod stats;
 mod thread;
 
 use super::Loader;
