@@ -2,7 +2,9 @@
 processes cost: user and kernel CPU time, page faults (an enclave page the
 kernel adds or loads back is a minor fault of the thread touching it), the
 CPU time of ksgxd (the kernel's EPC reclaimer), how many threads are busy,
-and the clock of the CPU the busiest thread is on.
+the clock of the CPU the busiest thread is on, and resident memory (peak RSS
+of each process, VmHWM, and of all of them together; enclave memory is not
+in RSS).
 Usage: measure.py <out-prefix> <cmd> [args...]
 Writes <out-prefix>.csv (one row a second) and prints a summary."""
 import os, subprocess, sys, time
@@ -29,8 +31,18 @@ def ksgxd():
                 pass
 
 
+def kb(pid, field):
+    try:
+        for line in open(f"/proc/{pid}/status"):
+            if line.startswith(field + ":"):
+                return int(line.split()[1])
+    except OSError:
+        pass
+    return 0
+
+
 def sample(sid):
-    procs = {"minflt": 0, "majflt": 0, "utime": 0, "stime": 0, "nproc": 0}
+    procs = {"minflt": 0, "majflt": 0, "utime": 0, "stime": 0, "nproc": 0, "rss_kb": 0, "hwm_kb": 0}
     threads = {}
     for pid in os.listdir("/proc"):
         if not pid.isdigit():
@@ -41,6 +53,8 @@ def sample(sid):
         procs["nproc"] += 1
         procs["minflt"] += int(f[7])
         procs["majflt"] += int(f[9])
+        procs["rss_kb"] += kb(pid, "VmRSS")
+        procs["hwm_kb"] = max(procs["hwm_kb"], kb(pid, "VmHWM"))
         try:
             tids = os.listdir(f"/proc/{pid}/task")
         except OSError:
@@ -86,6 +100,7 @@ while True:
     k = stat(f"/proc/{kpid}/stat") if kpid else None
     rows.append({"t": round(time.time() - start, 1), "nproc": procs["nproc"], "threads": len(threads),
                  "busy": busy, "minflt": procs["minflt"], "majflt": procs["majflt"],
+                 "rss_mb": procs["rss_kb"] // 1024, "hwm_mb": procs["hwm_kb"] // 1024,
                  "utime": sum(u for u, _, _ in threads.values()) / HZ,
                  "stime": sum(s for _, s, _ in threads.values()) / HZ,
                  "ksgxd": (int(k[11]) + int(k[12]) - int(k0[11]) - int(k0[12])) / HZ if k else 0,
@@ -107,6 +122,8 @@ busy = [r["busy"] for r in rows]
 print(f"measure: wall {wall:.1f} s rc {rc}  user {ut:.1f} s  kernel {st:.1f} s  "
       f"minflt (max seen) {flt}  ksgxd {ks:.1f} s  busy threads mean {sum(busy)/len(busy):.1f}  "
       f"busiest thread's CPU {sum(mhz)/max(len(mhz),1):.0f} MHz")
+print(f"measure: resident memory: peak of one process (VmHWM) {max(r['hwm_mb'] for r in rows)} MB, "
+      f"peak of all together {max(r['rss_mb'] for r in rows)} MB")
 top = sorted(seen.items(), key=lambda kv: -(kv[1][0] + kv[1][1]))[:6]
 print("measure: busiest threads (user/kernel s): " +
       ", ".join(f"{tid} {u / HZ:.1f}/{s / HZ:.1f}" for tid, (u, s, _) in top))
