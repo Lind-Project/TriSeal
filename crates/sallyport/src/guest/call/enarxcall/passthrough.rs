@@ -235,3 +235,38 @@ impl PassthroughAlloc for UnPark {
         Argv([])
     }
 }
+
+/// Map an open host file outside the enclave and return its address.
+pub struct MapShm {
+    pub fd: c_int,
+    pub length: usize,
+    pub writable: bool,
+}
+
+impl PassthroughAlloc for MapShm {
+    const NUM: Number = Number::MapShm;
+
+    type Argv = Argv<3>;
+    type Ret = usize;
+
+    fn stage(self) -> Self::Argv {
+        Argv([self.fd as _, self.length, self.writable as _])
+    }
+}
+
+/// Truncate a file mapped with [`MapShm`] to `length` bytes and flush it.
+pub struct CommitShm {
+    pub fd: c_int,
+    pub length: usize,
+}
+
+impl PassthroughAlloc for CommitShm {
+    const NUM: Number = Number::CommitShm;
+
+    type Argv = Argv<2>;
+    type Ret = ();
+
+    fn stage(self) -> Self::Argv {
+        Argv([self.fd as _, self.length])
+    }
+}

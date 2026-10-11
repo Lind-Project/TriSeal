@@ -52,10 +52,11 @@ use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 
 use mmledger::{Record, Region, Span};
 use primordial::{Address, Offset, Page};
+use sallyport::guest::enarxcall::{CommitShm, MapShm};
 use sallyport::guest::syscall::ClockGettime;
 use sallyport::guest::{self, syscall as sys, Handler as _, Platform, ThreadLocalStorage};
 use sallyport::item::enarxcall::sgx::{Report, ReportData, TargetInfo, TECH};
-use sallyport::item::enarxcall::{SYS_GETATT, SYS_GETKEY};
+use sallyport::item::enarxcall::{SYS_COMMITSHM, SYS_GETATT, SYS_GETKEY, SYS_MAPSHM};
 use sallyport::libc::{
     clockid_t, off_t, pid_t, timespec, CloneFlags, SYS_clock_gettime, SYS_futex, SYS_sched_yield,
     CLOCK_MONOTONIC, EACCES, EAGAIN, EINVAL, EIO, EMSGSIZE, ENOMEM, ENOSYS, ENOTSUP,
@@ -855,6 +856,27 @@ impl<'a> Handler<'a> {
         Ok([len, TECH])
     }
 
+    /// Ask the host to map an open host file outside the enclave. The address
+    /// it returns is refused unless the whole mapping lies outside the
+    /// enclave: lind copies the dump archive into this memory, and a host
+    /// that pointed it at the enclave would have the enclave overwrite itself.
+    fn map_shm(&mut self, fd: c_int, length: usize, writable: bool) -> sallyport::Result<usize> {
+        if length == 0 {
+            return Err(EINVAL);
+        }
+        let addr = self.execute(MapShm {
+            fd,
+            length,
+            writable,
+        })??;
+        let encl_start = shim_address();
+        let encl_end = encl_start + ENCL_SIZE;
+        match addr.checked_add(length) {
+            Some(end) if addr != 0 && (end <= encl_start || addr >= encl_end) => Ok(addr),
+            _ => self.attacked(),
+        }
+    }
+
     /// Write to a host file descriptor, bypassing the console buffer.
     fn write_host(&mut self, fd: c_int, buf: &[u8]) -> sallyport::Result<c_size_t> {
         self.execute(sys::Write { fd, buf })?
@@ -993,6 +1015,35 @@ impl<'a> Handler<'a> {
                     Err(e) => self.ssa.gpr.rax = -e as u64,
                     Ok(rax) => {
                         self.ssa.gpr.rax = rax as u64;
+                        self.ssa.gpr.rdx = orig_rdx;
+                    }
+                }
+            }
+            SYS_MAPSHM => {
+                let ret = self.map_shm(
+                    self.ssa.gpr.rdi as c_int,
+                    self.ssa.gpr.rsi as usize,
+                    self.ssa.gpr.rdx != 0,
+                );
+                match ret {
+                    Err(e) => self.ssa.gpr.rax = -e as u64,
+                    Ok(addr) => {
+                        self.ssa.gpr.rax = addr as u64;
+                        self.ssa.gpr.rdx = orig_rdx;
+                    }
+                }
+            }
+            SYS_COMMITSHM => {
+                let ret = self
+                    .execute(CommitShm {
+                        fd: self.ssa.gpr.rdi as c_int,
+                        length: self.ssa.gpr.rsi as usize,
+                    })
+                    .and_then(|r| r);
+                match ret {
+                    Err(e) => self.ssa.gpr.rax = -e as u64,
+                    Ok(()) => {
+                        self.ssa.gpr.rax = 0;
                         self.ssa.gpr.rdx = orig_rdx;
                     }
                 }
