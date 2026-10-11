@@ -8,6 +8,10 @@
 # Usage: e2e/sfp/triseal-shm.sh <prog> [workdir]   (prints "wall <s>")
 #   ROOT=<dir>  the staged tree (toolchain and sysroot) to build with
 #   PROBE=1  run `make --version` with the same preloads (startup alone)
+#   SMALL=1  pack only make, as a one-archive bundle (use with PROBE=1)
+#   NOATTEST=1  leave out --attest
+#   NOINTOTO=1  run the IMFS grate as the main module, without the in-toto
+#               grate (and so without attestation)
 #   BACKEND=nil  run the keep as a plain process, without SGX
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -45,7 +49,9 @@ sources=("$W/$p.c" "$W/Makefile" "$W/compat/sys/sysctl.h")
 
 BUNDLE=/dev/shm/sfp-shm.$$.prld
 DUMP=/dev/shm/sfp-shm.$$.dump
-"$MKPRELOAD" "$BUNDLE" "${pipeline[@]}" --section "${sources[@]}" 2>"$W/mkpreload.log" ||
+sections=("${pipeline[@]}" --section "${sources[@]}")
+[ "${SMALL:-0}" = 1 ] && sections=("$BIN/make")
+"$MKPRELOAD" "$BUNDLE" "${sections[@]}" 2>"$W/mkpreload.log" ||
   { tail -3 "$W/mkpreload.log"; exit 1; }
 grep "^mkpreload:" "$W/mkpreload.log" >&2
 
@@ -55,14 +61,19 @@ if [ "${PROBE:-0}" = 1 ]; then CMD=("$BIN/make" --version); DUMPS=""; fi
 {
   printf 'args = ['
   sep=""
-  for a in "$IMFS_GRATE" --preload-shm --attest --dump-shm "${CMD[@]}"; do printf '%s"%s"' "$sep" "$a"; sep=", "; done
+  FLAGS=(--preload-shm)
+  [ "${NOATTEST:-0}" = 1 ] || [ "${NOINTOTO:-0}" = 1 ] || FLAGS+=(--attest)
+  FLAGS+=(--dump-shm)
+  MAIN=("$IMFS_GRATE")
+  [ "${NOINTOTO:-0}" = 1 ] && MAIN=()
+  for a in "${MAIN[@]}" "${FLAGS[@]}" "${CMD[@]}"; do printf '%s"%s"' "$sep" "$a"; sep=", "; done
   printf ']\n\n[env]\nDUMPS = "%s"\n\n' "$DUMPS"
   printf '[shm]\npreload = "%s"\ndump = "%s"\ndump_size = %d\n' "$BUNDLE" "$DUMP" $((256 << 20))
 } >"$W/build.toml"
 
 start=$(date +%s.%N)
 LIND_GRATE_WORKERS=1 ENARX_BACKEND=${BACKEND:-sgx} ENARX_WASMCFGFILE="$W/build.toml" \
-  timeout 7200 ${TRACE:-} "$ENARX" run "$INTOTO_GRATE" >"$W/build.log" 2>&1
+  timeout 7200 ${TRACE:-} "$ENARX" run "$([ "${NOINTOTO:-0}" = 1 ] && echo "$IMFS_GRATE" || echo "$INTOTO_GRATE")" >"$W/build.log" 2>&1
 rc=$?
 end=$(date +%s.%N)
 echo "wall $(echo "$end - $start" | bc) rc=$rc"

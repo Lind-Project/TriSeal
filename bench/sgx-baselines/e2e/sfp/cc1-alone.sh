@@ -12,7 +12,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 BENCH=$(cd "$HERE/../.." && pwd)
 E=${E:-$HOME/sgx-bench/e2e}
 D=${D:-$E/cc1-alone}
-R=$E/root
+R=${ROOT:-$E/root}
 mode=$1 p=$2
 W=$D/work-$mode-$p
 rm -rf "$W" && mkdir -p "$W"
