@@ -15,7 +15,8 @@ use core::ptr::NonNull;
 
 use const_default::ConstDefault;
 use enarx_shim_sgx::thread::{
-    LoadRegsExt, NewThread, NewThreadFromRegisters, Tcb, NEW_THREAD_QUEUE, THREADS_FREE,
+    add_idle, take_pool_pending, wait_new_thread, LoadRegsExt, NewThread, NewThreadFromRegisters,
+    Tcb, THREADS_FREE,
 };
 use enarx_shim_sgx::{
     entry, handler, shim_address, ATTR, BLOCK_SIZE, CSSA_0_STACK_SIZE, ENARX_EXEC_START,
@@ -307,28 +308,43 @@ unsafe extern "C" fn main(
                 tcb.assume_init_mut()
             };
 
-            let thread = { NEW_THREAD_QUEUE.write().pop().unwrap() };
+            // A thread spawned to fill the pool has no work yet: it waits for
+            // a `clone()` like a thread that has finished its work.
+            if take_pool_pending() {
+                add_idle();
+            }
+            let mut thread = wait_new_thread();
 
-            match thread {
-                NewThread::Main => {
-                    // register the main thread
-                    tcb.tid = 0;
+            loop {
+                match thread {
+                    NewThread::Main => {
+                        // register the main thread
+                        tcb.tid = 0;
 
-                    // run the executable payload
-                    ret = entry::entry(&ENARX_EXEC_START as *const u8 as _, tcb)
+                        // run the executable payload
+                        ret = entry::entry(&ENARX_EXEC_START as *const u8 as _, tcb);
+                        break;
+                    }
+                    NewThread::Thread(NewThreadFromRegisters {
+                        tid,
+                        clear_on_exit,
+                        regs,
+                    }) => {
+                        // register the thread
+                        *tcb = Tcb::default();
+                        tcb.tid = tid;
+                        tcb.clear_on_exit = NonNull::new(clear_on_exit as _);
+
+                        // load the registers
+                        let _ = regs.load_registers(tcb);
+                    }
                 }
-                NewThread::Thread(NewThreadFromRegisters {
-                    tid,
-                    clear_on_exit,
-                    regs,
-                }) => {
-                    // register the thread
-                    tcb.tid = tid;
-                    tcb.clear_on_exit = NonNull::new(clear_on_exit as _);
 
-                    // load the registers
-                    ret = regs.load_registers(tcb);
-                }
+                // The thread has exited. Instead of leaving the enclave, wait
+                // here for the next `clone()` with a clean extended state.
+                add_idle();
+                thread = wait_new_thread();
+                clearx();
             }
             // increment the free counter, although it's not yet completely done
             *THREADS_FREE.write() += 1;

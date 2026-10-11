@@ -54,7 +54,7 @@ pub use bind::*;
 pub use chdir::*;
 pub use chmod::*;
 pub(crate) use clock_getres::*;
-pub(crate) use clock_gettime::*;
+pub use clock_gettime::*;
 pub use connect::*;
 pub use epoll_ctl::*;
 pub use epoll_pwait::EpollPwait;
