@@ -91,8 +91,11 @@ pub static NEW_THREAD_QUEUE: Lazy<RwLock<ConstVecDequeue<64, NewThread>>> = Lazy
 });
 
 /// Number of threads started up front to wait in the enclave for work, so
-/// that `clone()` does not have to ask the host for a new thread.
-pub const POOL_THREADS: usize = 8;
+/// that `clone()` does not have to ask the host for a new thread. Each one
+/// spins while it waits, so this trades CPU time for ocalls: 4 is the
+/// smallest pool with which a Lua build under the imfs grate needs no
+/// `Spawn` (2 does not).
+pub const POOL_THREADS: usize = 4;
 
 /// Whether the pool has been started (on the first `clone()`).
 pub static POOL_STARTED: AtomicBool = AtomicBool::new(false);
