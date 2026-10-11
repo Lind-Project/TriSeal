@@ -19,7 +19,7 @@
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 E=${E:-$HOME/sgx-bench/e2e}
-R=$E/root
+R=${ROOT:-$E/root}  # ROOT: the staged tree (toolchain and sysroot)
 G=$R/usr/local/lib/gcc/x86_64-linux-gnu/15.2.0
 L=$R/usr/lib/x86_64-linux-gnu
 BIN=$R/usr/local/bin

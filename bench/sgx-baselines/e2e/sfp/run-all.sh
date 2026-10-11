@@ -11,10 +11,12 @@ mkdir -p "$OUT"
 {
   date
   uname -a
-  for f in "$E/ze/TriSeal/target/release/enarx" "$E/ze/TriSeal-s/target/release/enarx" \
-    "$HERE/../../triseal/grates/ze/imfs-grate.cwasm" "$HERE/../../triseal/grates/ze/intoto-grate.cwasm"; do
+  for f in "${ENARX:-$E/ze/TriSeal/target/release/enarx}" "${ENARX_STATS:-$E/ze/TriSeal-s/target/release/enarx}" \
+    "${IMFS_GRATE:-$HERE/../../triseal/grates/ze/imfs-grate.cwasm}" \
+    "${INTOTO_GRATE:-$HERE/../../triseal/grates/ze/intoto-grate.cwasm}"; do
     echo "$f $(stat -c %y "$f")"
   done
+  echo "toolchain ${ROOT:-$E/root}"
   gramine-sgx --version 2>/dev/null | head -1
   docker image inspect --format "occlum image {{.Id}} {{.Created}}" occlum/occlum:latest-ubuntu20.04
   cat "${SFP:-$HOME/sgx-bench/sfp}/src/SHA256SUMS"

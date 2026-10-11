@@ -6,19 +6,22 @@
 #   occlum/run-docker.sh ./build.sh microbench
 # Usage: ./run-micro.sh [syscall_iters] [proc_iters] [system...]
 #   systems: native gramine-direct gramine-sgx triseal-sgx triseal-nogrates occlum-sgx
-#   (default: all). triseal-sgx runs under the imfs grate; triseal-nogrates
-#   runs microbench as the keep's workload (host files, working pipes).
-# ENARX / IMFS_GRATE pick TriSeal's runtime and imfs grate.
+#   (default: all but triseal-nogrates). triseal-sgx runs the pipe tests
+#   under the IPC grate and every other test under the IMFS grate (one
+#   column); triseal-nogrates runs microbench as the keep's workload (host
+#   files).
+# ENARX / IMFS_GRATE / IPC_GRATE pick TriSeal's runtime and grates.
 # Writes results/<timestamp>/: micro.csv, one <system>.log each, env.txt.
 set -uo pipefail
 SYS_N=${1:-100000}
 PROC_N=${2:-20}
 shift 2 2>/dev/null || shift $#
-SYSTEMS=${*:-native gramine-direct gramine-sgx triseal-sgx triseal-nogrates occlum-sgx}
+SYSTEMS=${*:-native gramine-direct gramine-sgx triseal-sgx occlum-sgx}
 HERE=$(cd "$(dirname "$0")" && pwd)
 LIND=${LIND:-$HOME/lind-wasm}
 ENARX=${ENARX:-$HOME/sgx-bench/e2e/ts/TriSeal36/target/release/enarx}
 IMFS_GRATE=${IMFS_GRATE:-$HERE/triseal/grates/imfs-grate-clock.cwasm}
+IPC_GRATE=${IPC_GRATE:-$HERE/triseal/grates/ipc-grate.cwasm}
 OUT=${OUT:-$HERE/results/$(date +%Y%m%d-%H%M%S)}
 mkdir -p "$OUT"
 echo "system,test,iters,total_ns,ns_per_op,skip_reason" >"$OUT/micro.csv"
@@ -26,8 +29,8 @@ echo "system,test,iters,total_ns,ns_per_op,skip_reason" >"$OUT/micro.csv"
 # TriSeal takes its argv from Enarx.toml: write one per invocation.
 triseal_toml() {
   local toml=$OUT/Enarx.$1.toml args
-  # "all" runs every test.
-  if [ "$1" = all ]; then shift; fi
+  # $1 names the file; the tests follow (none runs every test).
+  shift
   args=$(printf ', "%s"' "$SYS_N" "$PROC_N" "$@")
   sed "s|^args = .*|args = [\"/microbench\"$args]|" \
     "$HERE/triseal/build/Enarx.microbench.toml" >"$toml"
@@ -48,6 +51,7 @@ triseal_toml() {
   echo "enarx $ENARX $(stat -c %y "$ENARX")"
   echo "lind-wasm runtime $(git -C "$HOME/sgx-bench/e2e/lw-opt" log -1 --format='%h %s' 2>/dev/null)"
   echo "imfs grate $IMFS_GRATE $(stat -c %y "$IMFS_GRATE")"
+  echo "ipc grate $IPC_GRATE $(stat -c %y "$IPC_GRATE")"
 } >"$OUT/env.txt" 2>&1
 
 # run <system> <cmd...>: append the output to <system>.log and its @mb lines
@@ -77,8 +81,16 @@ for sys in $SYSTEMS; do
     gramine-sgx)
       run gramine-sgx bash -c "cd '$HERE/gramine' && gramine-sgx microbench $SYS_N $PROC_N" ;;
     triseal-sgx)
+      # Files and processes under the IMFS grate, pipes under the IPC grate
+      # (IMFS has no pipes), which runs microbench from its host path.
       run triseal-sgx env LIND_GRATE_WORKERS=1 ENARX_BACKEND=sgx \
-        ENARX_WASMCFGFILE="$(triseal_toml all)" "$ENARX" run "$IMFS_GRATE" ;;
+        ENARX_WASMCFGFILE="$(triseal_toml imfs getpid clock_gettime file_lseek file_open_close \
+          file_stat file_write_64 file_write_4k file_read_64 file_read_4k fork_exit fork_exec spawn_exec)" \
+        "$ENARX" run "$IMFS_GRATE"
+      printf 'args = ["%s/triseal/build/microbench.cwasm", "%s", "%s", "pipe_rw", "pipe_pingpong"]\n' \
+        "$HERE" "$SYS_N" "$PROC_N" >"$OUT/Enarx.ipc.toml"
+      run triseal-sgx env LIND_GRATE_WORKERS=1 ENARX_BACKEND=sgx ENARX_WASMCFGFILE="$OUT/Enarx.ipc.toml" \
+        "$ENARX" run "$IPC_GRATE" ;;
     triseal-nogrates)
       # No imfs: files are host files, and exec targets are not preloaded,
       # so only the syscall, pipe and file tests run here.
