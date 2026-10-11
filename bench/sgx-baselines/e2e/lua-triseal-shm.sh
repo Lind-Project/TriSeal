@@ -6,7 +6,8 @@
 #          bundle of two archives in /dev/shm; the keep maps it, and the file
 #          the dump goes to, before lind starts ([shm] in Enarx.toml)
 #   keep   the in-toto grate runs the IMFS grate, which
-#          1. copies the compiler pipeline out of the bundle and stages it,
+#          0. copies the whole bundle out of shared memory, in one call,
+#          1. stages the compiler pipeline from that copy,
 #          2. stops and has it attested: the in-toto grate reads the archive
 #             out of IMFS memory, hashes every file and signs a statement,
 #          3. resumes with the sources, and stops again to have them attested,

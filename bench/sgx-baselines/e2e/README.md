@@ -130,10 +130,11 @@ one bundle of two archives (`mkpreload <bundle> <pipeline...> --section
 
 1. Before lind starts, the keep has the host map the bundle and a dump file
    outside the enclave (`[shm]` in Enarx.toml).
-2. IMFS copies the compiler pipeline out of that memory and stages it, then
-   stops; the in-toto grate reads the archive from IMFS's memory, hashes
-   every file and signs an in-toto statement (DSSE, ECDSA P-256 key made in
-   the enclave).
+2. IMFS copies the whole bundle out of that memory into its own, in one
+   call; everything after works on that copy. It stages the compiler
+   pipeline, then stops; the in-toto grate reads the archive from IMFS's
+   memory, hashes every file and signs an in-toto statement (DSSE, ECDSA
+   P-256 key made in the enclave).
 3. IMFS resumes with the sources, and stops again for the second
    attestation, which records the hash of the first envelope.
 4. make runs. At exit lua, luac and the attestations go into one archive,
