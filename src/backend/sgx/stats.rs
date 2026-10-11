@@ -84,6 +84,7 @@ pub fn init() {
             libc::signal(libc::SIGINT, on_signal as *const () as libc::sighandler_t);
             libc::signal(libc::SIGTERM, on_signal as *const () as libc::sighandler_t);
         }
+        watch_phases();
         if let Some(secs) = interval() {
             std::thread::Builder::new()
                 .name("sgx-stats".into())
@@ -94,6 +95,59 @@ pub fn init() {
                 .expect("failed to spawn sgx-stats thread");
         }
     });
+}
+
+/// Watch the phase page the keep shares with the host (see `shared`): when
+/// the workload marks a phase, print the summary and acknowledge the mark,
+/// which the keep waits for, so that what follows the mark can be told from
+/// what came before it.
+fn watch_phases() {
+    std::thread::Builder::new()
+        .name("sgx-phase".into())
+        .spawn(|| {
+            use super::shared::phase::{ACK, PHASE, WATCH};
+            use std::sync::atomic::Ordering::SeqCst;
+            let page = loop {
+                if let Some(page) = super::shared::phase_page() {
+                    break page;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            };
+            page[WATCH].store(1, SeqCst);
+            let mut last = 0;
+            loop {
+                let phase = page[PHASE].load(SeqCst);
+                if phase != last {
+                    dump_titled(&format!("at phase {phase} "));
+                    page[ACK].store(phase, SeqCst);
+                    last = phase;
+                }
+                std::thread::sleep(std::time::Duration::from_micros(50));
+            }
+        })
+        .expect("failed to spawn sgx-phase thread");
+}
+
+/// Print what the shim counted in the enclave (see `shared::phase`).
+fn print_shim_counters() {
+    let Some(page) = super::shared::phase_page() else {
+        return;
+    };
+    use super::shared::phase::{AT_EXIT, AT_PHASE, COUNTERS, NAMES, PHASE};
+    eprintln!(
+        "  shim counters (at the phase {} mark / at exit):",
+        page[PHASE].load(Relaxed)
+    );
+    for i in 0..COUNTERS {
+        if !NAMES[i].is_empty() {
+            eprintln!(
+                "    {}: {} / {}",
+                NAMES[i],
+                page[AT_PHASE + i].load(Relaxed),
+                page[AT_EXIT + i].load(Relaxed)
+            );
+        }
+    }
 }
 
 /// Record an enclave entry via `how` (`EENTER` or `ERESUME`).
@@ -236,4 +290,5 @@ fn dump_titled(title: &str) {
             eprintln!("    >{}: {other}", MAX_SYSCALL - 1);
         }
     }
+    print_shim_counters();
 }
