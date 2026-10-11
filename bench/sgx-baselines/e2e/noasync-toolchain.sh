@@ -12,7 +12,9 @@
 # The script first checks that these commands reproduce the toolchain's
 # .opt.wasm byte for byte, then precompiles with the lind-boot that made its
 # .cwasm files (LIND_BOOT).
-# Usage: e2e/noasync-toolchain.sh
+# CC1_OPT (default -Os, as compile_gcc.sh) picks wasm-opt's level for cc1
+# without Asyncify; with another level the tree is $E/root-na$CC1_OPT.
+# Usage: e2e/noasync-toolchain.sh     (CC1_OPT=-O3 for $E/root-na-O3)
 set -euo pipefail
 E=${E:-$HOME/sgx-bench/e2e}
 CONTAINER=${CONTAINER:-lind-sep25}
@@ -22,6 +24,9 @@ LIND_BOOT=${LIND_BOOT:-$LIND_WASM/build/lind-boot}
 WO=$LIND_WASM/tools/binaryen/bin/wasm-opt
 OPT=$LIND_WASM/scripts/lind-wasm-opt
 D=$E/noasync
+CC1_OPT=${CC1_OPT:--Os}
+RNA=$E/root-na
+[ "$CC1_OPT" = -Os ] || RNA=$E/root-na$CC1_OPT
 mkdir -p "$D/raw"
 cd "$D"
 
@@ -36,7 +41,7 @@ done
 # The toolchain's instrumented builds, reproduced, then without Asyncify.
 "$WO" --epoch-injection --asyncify --pass-arg=asyncify-removelist@@raw/asyncify_ignore.txt \
   --strip-debug -Os raw/cc1.wasm -o cc1.default.wasm
-"$WO" --epoch-injection --strip-debug -Os raw/cc1.wasm -o cc1.noasync.wasm
+"$WO" --epoch-injection --strip-debug "$CC1_OPT" raw/cc1.wasm -o cc1.noasync.wasm
 for t in as ld; do
   "$OPT" --static "raw/$t.wasm" -o "$t.default.wasm"
   "$OPT" --static --without-asyncify "raw/$t.wasm" -o "$t.noasync.wasm"
@@ -49,14 +54,14 @@ done
 
 # root-na: hard links to root, but its own cc1, as, ld and linker scripts
 # (which name the tree's libraries by absolute path).
-[ -d "$E/root-na" ] || cp -al "$E/root" "$E/root-na"
+[ -d "$RNA" ] || cp -al "$E/root" "$RNA"
 for t in cc1 as ld; do
-  rm -f "$E/root-na/usr/local/bin/$t"
-  cp "$t.noasync.cwasm" "$E/root-na/usr/local/bin/$t"
+  rm -f "$RNA/usr/local/bin/$t"
+  cp "$t.noasync.cwasm" "$RNA/usr/local/bin/$t"
 done
 for f in libc.so libm.so; do
-  p=$E/root-na/usr/lib/x86_64-linux-gnu/$f
-  sed "s#$E/root/#$E/root-na/#g" "$E/root/usr/lib/x86_64-linux-gnu/$f" >"$p.new"
+  p=$RNA/usr/lib/x86_64-linux-gnu/$f
+  sed "s#$E/root/#$RNA/#g" "$E/root/usr/lib/x86_64-linux-gnu/$f" >"$p.new"
   rm -f "$p" && mv "$p.new" "$p"
 done
-echo "staged $E/root-na"
+echo "staged $RNA"
