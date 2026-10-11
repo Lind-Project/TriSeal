@@ -4,7 +4,8 @@
 //! exits, so that writing to the console does not leave the enclave.
 //!
 //! Writes are stored in order as records of `[fd: u8][len: u32][bytes]` and
-//! written to the host by `exit_group()`, or earlier if the buffer fills up.
+//! written to the host by `exit_group()`, or earlier if the buffer fills up,
+//! one host write per run of writes to the same fd.
 
 use spin::Mutex;
 
@@ -38,16 +39,27 @@ impl Console {
         true
     }
 
-    /// Pass every buffered write to `f`, oldest first, and empty the buffer.
+    /// Pass the buffered output to `f`, oldest first, and empty the buffer.
+    /// Consecutive writes to the same fd are passed as one, so that flushing
+    /// takes as few host writes as possible: their bytes are moved together
+    /// in place, over the record headers between them.
     pub fn drain(&mut self, mut f: impl FnMut(u8, &[u8])) {
-        let mut at = 0;
-        while at < self.len {
-            let fd = self.buf[at];
-            let mut len = [0; 4];
-            len.copy_from_slice(&self.buf[at + 1..at + HEADER]);
-            let end = at + HEADER + u32::from_le_bytes(len) as usize;
-            f(fd, &self.buf[at + HEADER..end]);
-            at = end;
+        let mut read = 0;
+        while read < self.len {
+            let fd = self.buf[read];
+            let start = read;
+            let mut write = start;
+            while read < self.len && self.buf[read] == fd {
+                let mut len = [0; 4];
+                len.copy_from_slice(&self.buf[read + 1..read + HEADER]);
+                let data = read + HEADER;
+                let end = data + u32::from_le_bytes(len) as usize;
+                // `write` never passes `data`, so this moves bytes left.
+                self.buf.copy_within(data..end, write);
+                write += end - data;
+                read = end;
+            }
+            f(fd, &self.buf[start..write]);
         }
         self.len = 0;
     }

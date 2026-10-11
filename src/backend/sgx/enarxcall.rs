@@ -328,6 +328,53 @@ pub(crate) fn sgx_enarxcall<'a>(
             Ok(None)
         }
 
+        item::Enarxcall {
+            num: item::enarxcall::Number::MapShm,
+            argv: [fd, len, writable, ..],
+            ret,
+            ..
+        } => {
+            // Map a host file the keep opened (its preload bundle, or the file
+            // its dump archive goes to) outside the enclave. The keep checks
+            // that the address is outside the enclave before using it.
+            let fd = *fd as libc::c_int;
+            let mut prot = libc::PROT_READ;
+            if *writable != 0 {
+                if unsafe { libc::ftruncate(fd, *len as libc::off_t) } != 0 {
+                    *ret = (-io::Error::last_os_error().raw_os_error().unwrap()) as usize;
+                    return Ok(None);
+                }
+                prot |= libc::PROT_WRITE;
+            }
+            let addr =
+                unsafe { libc::mmap(std::ptr::null_mut(), *len, prot, libc::MAP_SHARED, fd, 0) };
+            *ret = if addr == libc::MAP_FAILED {
+                (-io::Error::last_os_error().raw_os_error().unwrap()) as usize
+            } else {
+                addr as usize
+            };
+            Ok(None)
+        }
+
+        item::Enarxcall {
+            num: item::enarxcall::Number::CommitShm,
+            argv: [fd, len, ..],
+            ret,
+            ..
+        } => {
+            // The dump archive has been written to the mapping: cut the file
+            // to its length and flush it.
+            let fd = *fd as libc::c_int;
+            *ret = if unsafe { libc::ftruncate(fd, *len as libc::off_t) } != 0
+                || unsafe { libc::fsync(fd) } != 0
+            {
+                (-io::Error::last_os_error().raw_os_error().unwrap()) as usize
+            } else {
+                0
+            };
+            Ok(None)
+        }
+
         _ => return Ok(Some(Item::Enarxcall(enarxcall, data))),
     }
 }

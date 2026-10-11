@@ -19,6 +19,17 @@ pub const SYS_GETATT: i64 = 0xEA01;
 #[allow(dead_code)]
 pub const SYS_GETKEY: i64 = 0xEA02;
 
+/// `map_shm(fd, len, writable)` syscall number used by the shim: ask the host
+/// to map an open host file outside the enclave, returning its address. A
+/// writable mapping is first sized to `len`.
+#[allow(dead_code)]
+pub const SYS_MAPSHM: i64 = 0xEA03;
+
+/// `commit_shm(fd, len)` syscall number used by the shim: ask the host to
+/// truncate a file mapped with `map_shm` to `len` bytes and flush it.
+#[allow(dead_code)]
+pub const SYS_COMMITSHM: i64 = 0xEA04;
+
 /// Payload of an [`Item`](super::Item) of [`Kind::Enarxcall`](super::Kind::Enarxcall).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(C, align(8))]
@@ -86,6 +97,12 @@ pub enum Number {
 
     /// Register a new sallyport block
     NewSallyport = 0x14,
+
+    /// Map an open host file outside the enclave
+    MapShm = 0x15,
+
+    /// Truncate and flush a file mapped with `MapShm`
+    CommitShm = 0x16,
 }
 
 #[cfg(test)]
