@@ -101,6 +101,11 @@ fi
 
 cd "$I"
 rm -f "host/$out"
+# SEFS keeps what a run writes: remove the last build's output first (not
+# timed), or make finds it up to date and builds nothing.
+if [ "${PROBE:-0}" != 1 ]; then
+  occlum run /bin/busybox rm -f "$W/$out" >"$HERE/rm.$p.log" 2>&1
+fi
 CC="/bin/gcc -B/bin/ -B$L/ -B$G/ -isystem $G/include -isystem $R/usr/include"
 # No shell: Occlum has no fork, and make runs its one-line recipe itself.
 if [ "${PROBE:-0}" = 1 ]; then
@@ -123,6 +128,10 @@ end=$(date +%s%N)
 ns=$((end - start))
 printf 'wall %d.%09d rc=%d\n' $((ns / 1000000000)) $((ns % 1000000000)) "$rc"
 grep -E "error|Error|undefined" "$HERE/run.$p.log" | head -5 || true
+if grep -q "is up to date" "$HERE/run.$p.log"; then
+  echo "make built nothing"
+  exit 1
+fi
 # Copy the result out (not timed): a second run, since there is no shell.
 if [ "$kind" = build ] && [ "$rc" = 0 ]; then
   occlum run /bin/busybox cp "$W/$out" "/host/$out" >>"$HERE/run.$p.log" 2>&1 || true
