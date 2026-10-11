@@ -24,6 +24,7 @@
 #   PROBE=1     run `make --version` instead of the build
 #   SMALL=1     pack only make, as a one-archive bundle (use with PROBE=1)
 #   NOATTEST=1  leave out --attest;  NODUMP=1  leave out --dump-shm
+#   ROOT=<dir>  the staged tree (toolchain and sysroot) to build with
 #   NOINTOTO=1  run the IMFS grate as the main module, without the in-toto
 #               grate (and so without attestation)
 #   TAMPER=1    flip the last byte of the bundle after packing (a byte of the
@@ -31,7 +32,7 @@
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 E=${E:-$HOME/sgx-bench/e2e}
-R=$E/root
+R=${ROOT:-$E/root}
 G=$R/usr/local/lib/gcc/x86_64-linux-gnu/15.2.0
 L=$R/usr/lib/x86_64-linux-gnu
 BIN=$R/usr/local/bin

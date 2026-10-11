@@ -6,6 +6,7 @@
 # which copies the bundle in, has each archive attested, runs make, and puts
 # the output and the attestations in one dump archive the host cuts at exit.
 # Usage: e2e/sfp/triseal-shm.sh <prog> [workdir]   (prints "wall <s>")
+#   ROOT=<dir>  the staged tree (toolchain and sysroot) to build with
 #   PROBE=1  run `make --version` with the same preloads (startup alone)
 #   BACKEND=nil  run the keep as a plain process, without SGX
 set -uo pipefail
@@ -13,7 +14,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 . "$HERE/sfp.conf"
 BENCH=$(cd "$HERE/../.." && pwd)
 E=${E:-$HOME/sgx-bench/e2e}
-R=$E/root
+R=${ROOT:-$E/root}
 G=$R/usr/local/lib/gcc/x86_64-linux-gnu/15.2.0
 L=$R/usr/lib/x86_64-linux-gnu
 BIN=$R/usr/local/bin
