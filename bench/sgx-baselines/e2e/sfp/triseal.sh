@@ -5,6 +5,8 @@
 # the binary is dumped to the host at exit and smoke-tested natively.
 # Usage: e2e/sfp/triseal.sh <prog> [workdir]   (prints "wall <s>")
 #   PROBE=1  run `make --version` with the same preloads (startup alone)
+#   BACKEND=nil  run the keep as a plain process, without SGX
+#   LIND_BOOT=<lind-boot>  run the grate and cages under lind-boot, no TEE
 #   TWICE=1  build two copies one after the other in the same keep
 #            (twobuild), "@build <n> <dir> <s> <rc>" for each
 #   NODUMP=1 keep the binary in the keep
@@ -68,8 +70,15 @@ PRE=$(printf '%s:' "${files[@]}")
 } >"$W/build.toml"
 
 start=$(date +%s.%N)
-LIND_GRATE_WORKERS=1 ENARX_BACKEND=sgx ENARX_WASMCFGFILE="$W/build.toml" \
-  timeout 7200 ${TRACE:-} "$ENARX" run "$IMFS_GRATE" >"$W/build.log" 2>&1
+if [ -n "${LIND_BOOT:-}" ]; then
+  # The same grate and cages under lind-wasm's own runtime, outside any TEE
+  # (a lind-boot that skips its chroot when LIND_NO_CHROOT is set).
+  LIND_NO_CHROOT=1 LIND_GRATE_WORKERS=1 timeout 7200 ${TRACE:-} "$LIND_BOOT" \
+    --env "PRELOADS=${PRE%:}" --env "DUMPS=$DUMPS" "$IMFS_GRATE" "${CMD[@]}" >"$W/build.log" 2>&1
+else
+  LIND_GRATE_WORKERS=1 ENARX_BACKEND=${BACKEND:-sgx} ENARX_WASMCFGFILE="$W/build.toml" \
+    timeout 7200 ${TRACE:-} "$ENARX" run "$IMFS_GRATE" >"$W/build.log" 2>&1
+fi
 rc=$?
 end=$(date +%s.%N)
 echo "wall $(echo "$end - $start" | bc) rc=$rc"

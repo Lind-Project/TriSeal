@@ -7,6 +7,7 @@
 # the output and the attestations in one dump archive the host cuts at exit.
 # Usage: e2e/sfp/triseal-shm.sh <prog> [workdir]   (prints "wall <s>")
 #   PROBE=1  run `make --version` with the same preloads (startup alone)
+#   BACKEND=nil  run the keep as a plain process, without SGX
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 . "$HERE/sfp.conf"
@@ -59,7 +60,7 @@ if [ "${PROBE:-0}" = 1 ]; then CMD=("$BIN/make" --version); DUMPS=""; fi
 } >"$W/build.toml"
 
 start=$(date +%s.%N)
-LIND_GRATE_WORKERS=1 ENARX_BACKEND=sgx ENARX_WASMCFGFILE="$W/build.toml" \
+LIND_GRATE_WORKERS=1 ENARX_BACKEND=${BACKEND:-sgx} ENARX_WASMCFGFILE="$W/build.toml" \
   timeout 7200 ${TRACE:-} "$ENARX" run "$INTOTO_GRATE" >"$W/build.log" 2>&1
 rc=$?
 end=$(date +%s.%N)

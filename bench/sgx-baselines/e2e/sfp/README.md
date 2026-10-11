@@ -52,3 +52,19 @@ startup alone); `triseal.sh`, `gramine.sh` and `native.sh` take `TWICE=1`
   whole TEE process tree (`strace -f -c`), build minus probe; Occlum has
   no counters of its own, so this is its ocall measure.
 - `run-all.sh`: both, into one directory, with the versions used.
+
+## Where the time goes
+
+- `measure.py <prefix> <cmd...>`: runs a command in its own session and
+  samples every second its CPU time, page faults, ksgxd's CPU time, busy
+  threads and the busiest thread's clock.
+- `cc1-alone.sh <native|lind|triseal> <prog>`: cc1 alone on the
+  preprocessed source, the host's cc1, the wasm cc1 under lind-boot outside
+  any TEE (`LIND_BOOT`: a lind-boot that runs outside a keep), or in a
+  TriSeal keep.
+- `wasm-variants.sh`: oggenc.c built with lind's toolchain with and without
+  its instrumentation (asyncify, epoch), run by lind-boot, against native
+  gcc and clang builds.
+- `triseal.sh` takes `BACKEND=nil` (Enarx without SGX; does not run lind
+  today) and `LIND_BOOT=<lind-boot>` (the grate and cages under lind-boot,
+  no TEE).
