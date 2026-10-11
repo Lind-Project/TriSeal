@@ -7,8 +7,8 @@
 //! the file the dump archive goes to are opened here, mapped by the host
 //! (`SYS_MAPSHM`), and registered with rawposix. From then on a grate copies
 //! its preloads out of, and its dump into, that memory without leaving the
-//! keep; committing the dump (`SYS_COMMITSHM`) is the one host call the
-//! regions need while lind runs.
+//! keep. Committing a dump asks nothing of the host either: the host cuts
+//! the dump file to the length of the archive in it when the keep exits.
 
 use anyhow::{bail, Context, Result};
 use enarx_config::Shm;
@@ -41,11 +41,12 @@ pub fn setup(shm: &Shm) -> Result<()> {
             .open(path)
             .with_context(|| format!("cannot create the dump file {path}"))?;
         let capacity = shm.dump_size.unwrap_or(DEFAULT_DUMP_SIZE) as usize;
-        // Kept open: the commit truncates it to the dump's length.
+        // Kept open: the host cuts it to the dump's length at exit.
         let fd = file.into_raw_fd();
         let addr =
             map(fd, capacity, true).with_context(|| format!("cannot map the dump file {path}"))?;
-        let commit: rawposix::shm::DumpCommit = Box::new(move |len| commit(fd, len));
+        // The host cuts the file to the archive's length at exit.
+        let commit: rawposix::shm::DumpCommit = Box::new(|_len| Ok(()));
         unsafe { rawposix::shm::register_dump(addr as *mut u8, capacity, commit) };
     }
     Ok(())
@@ -79,14 +80,12 @@ fn map(fd: i32, len: usize, writable: bool) -> Result<usize> {
     }
 }
 
-/// Have the host truncate the dump file to `len` bytes and flush it.
+/// Pass a phase mark to the shim. Through libc, so that with the musl from
+/// `musl/build.sh` it does not leave the enclave either.
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-fn commit(fd: i32, len: usize) -> Result<(), i32> {
-    use sallyport::item::enarxcall::SYS_COMMITSHM;
-    match raw_syscall(SYS_COMMITSHM, fd as usize, len, 0) {
-        ret if ret < 0 => Err(ret as i32),
-        _ => Ok(()),
-    }
+pub fn phase(n: u64) {
+    use sallyport::item::enarxcall::SYS_PHASE;
+    unsafe { libc::syscall(SYS_PHASE as libc::c_long, n) };
 }
 
 #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
@@ -95,6 +94,4 @@ fn map(_fd: i32, _len: usize, _writable: bool) -> Result<usize> {
 }
 
 #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
-fn commit(_fd: i32, _len: usize) -> Result<(), i32> {
-    Err(-(libc::ENOSYS))
-}
+pub fn phase(_n: u64) {}

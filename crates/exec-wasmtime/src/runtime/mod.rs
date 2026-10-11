@@ -56,6 +56,10 @@ impl Runtime {
             shm::setup(regions).context("failed to set up the [shm] regions")?;
         }
 
+        // Hand the workload's phase marks (LIND_PHASE) to the shim, which
+        // records them where the host can count from them.
+        rawposix::phase::register(Box::new(shm::phase));
+
         let options = lind_boot::cli::CliOptions {
             verbose: 0,
             debug: false,
