@@ -11,6 +11,9 @@
 #   column); triseal-nogrates runs microbench as the keep's workload (host
 #   files).
 # ENARX / IMFS_GRATE / IPC_GRATE pick TriSeal's runtime and grates.
+# GRAMINE_MB_FILE is Gramine's scratch file for the file tests: by default on
+# its encrypted mount (/enc, host files encrypted by Gramine); /tmp/... puts
+# it on Gramine's tmpfs (in-enclave memory, private to a process).
 # Writes results/<timestamp>/: micro.csv, one <system>.log each, env.txt.
 set -uo pipefail
 SYS_N=${1:-100000}
@@ -22,6 +25,7 @@ LIND=${LIND:-$HOME/lind-wasm}
 ENARX=${ENARX:-$HOME/sgx-bench/e2e/ts/TriSeal36/target/release/enarx}
 IMFS_GRATE=${IMFS_GRATE:-$HERE/triseal/grates/imfs-grate-clock.cwasm}
 IPC_GRATE=${IPC_GRATE:-$HERE/triseal/grates/ipc-grate.cwasm}
+GRAMINE_MB_FILE=${GRAMINE_MB_FILE:-/enc/microbench.dat}
 OUT=${OUT:-$HERE/results/$(date +%Y%m%d-%H%M%S)}
 mkdir -p "$OUT"
 echo "system,test,iters,total_ns,ns_per_op,skip_reason" >"$OUT/micro.csv"
@@ -45,6 +49,7 @@ triseal_toml() {
        "no_turbo $(cat /sys/devices/system/cpu/intel_pstate/no_turbo)"
   echo "iters syscall=$SYS_N proc=$PROC_N"
   gramine-sgx --version 2>&1 | head -1
+  echo "gramine file tests on $GRAMINE_MB_FILE"
   grep -E "^(enclave_size|edmm_enable|max_threads) " "$HERE/gramine/microbench.manifest"
   docker image inspect occlum/occlum:latest-ubuntu20.04 --format "occlum image {{.Id}} {{.Created}}"
   jq -c .resource_limits "$HERE/occlum/inst/Occlum.json"
@@ -74,12 +79,12 @@ run() {
 for sys in $SYSTEMS; do
   case $sys in
     native)
-      # /dev/shm keeps the file tests in memory, like the other systems.
+      # /dev/shm keeps the file tests in memory.
       run native bash -c "cd '$HERE/gramine/app' && MB_FILE=/dev/shm/microbench.dat ./microbench $SYS_N $PROC_N" ;;
     gramine-direct)
-      run gramine-direct bash -c "cd '$HERE/gramine' && gramine-direct microbench $SYS_N $PROC_N" ;;
+      run gramine-direct bash -c "cd '$HERE/gramine' && MB_FILE='$GRAMINE_MB_FILE' gramine-direct microbench $SYS_N $PROC_N" ;;
     gramine-sgx)
-      run gramine-sgx bash -c "cd '$HERE/gramine' && gramine-sgx microbench $SYS_N $PROC_N" ;;
+      run gramine-sgx bash -c "cd '$HERE/gramine' && MB_FILE='$GRAMINE_MB_FILE' gramine-sgx microbench $SYS_N $PROC_N" ;;
     triseal-sgx)
       # Files and processes under the IMFS grate, pipes under the IPC grate
       # (IMFS has no pipes), which runs microbench from its host path.
