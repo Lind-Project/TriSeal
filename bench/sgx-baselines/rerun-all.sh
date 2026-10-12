@@ -3,9 +3,10 @@
 # category:
 #   1-microbench/       run-micro.sh: syscall, pipe, file and process tests
 #                       (TriSeal: pipes under the IPC grate, the rest under
-#                       the IMFS grate)
-#   2-fs-microbench/    file-compare.sh: file I/O per file system, host
-#                       syscalls per call (TriSeal: IMFS)
+#                       the IMFS grate; Gramine: file tests on its encrypted
+#                       mount)
+#   2-fs-microbench/    file-compare.sh: file I/O, host syscalls per call
+#                       (TriSeal: IMFS; Gramine: its encrypted mount)
 #   3-sfp/              e2e/sfp/run-all.sh: oggenc.c and gcc.c on native,
 #                       TriSeal, Gramine and Occlum, cold vs warm, and what
 #                       each build asks of the host
@@ -60,8 +61,8 @@ step() {
   echo "   rc=$? $(date +%T)" | tee -a "$R/env.txt" >&2
 }
 step 1-microbench "$HERE/run-micro.sh" 100000 20
-step 2-fs-microbench "$HERE/file-compare.sh" native gramine-tmpfs gramine-allowed \
-  gramine-encrypted gramine-trusted triseal-imfs occlum-ramfs occlum-sefs
+step 2-fs-microbench "$HERE/file-compare.sh" native gramine-encrypted triseal-imfs \
+  occlum-ramfs occlum-sefs
 step 3-sfp env N="$N" "$HERE/e2e/sfp/run-all.sh" "$R/3-sfp"
 step 4-e2e-cold-warm "$HERE/e2e/coldwarm.sh" "$N"
 step 5-e2e-ecall-ocall "$HERE/e2e/after-start.sh"
