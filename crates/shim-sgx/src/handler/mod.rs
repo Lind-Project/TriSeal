@@ -48,7 +48,7 @@ use core::mem::size_of;
 use core::ops::Deref;
 use core::ptr::read_unaligned;
 use core::ptr::NonNull;
-use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64, Ordering};
 
 use mmledger::{Record, Region, Span};
 use primordial::{Address, Offset, Page};
@@ -61,11 +61,14 @@ use sallyport::item::enarxcall::{
     SYS_SALLY,
 };
 use sallyport::libc::{
-    clockid_t, off_t, pid_t, timespec, CloneFlags, SYS_clock_gettime, SYS_futex, SYS_sched_yield,
-    CLOCK_MONOTONIC, EACCES, EAGAIN, EINTR, EINVAL, EIO, EMSGSIZE, ENOMEM, ENOSYS, ENOTSUP,
-    FUTEX_BITSET_MATCH_ANY, FUTEX_CLOCK_REALTIME, FUTEX_PRIVATE_FLAG, FUTEX_WAIT,
-    FUTEX_WAIT_BITSET, FUTEX_WAKE, FUTEX_WAKE_BITSET, MAP_ANONYMOUS, MAP_PRIVATE, PROT_EXEC,
-    PROT_READ, PROT_WRITE, STDERR_FILENO, STDOUT_FILENO,
+    clockid_t, off_t, pid_t, timespec, CloneFlags, SYS_brk, SYS_clock_gettime, SYS_clone, SYS_exit,
+    SYS_exit_group, SYS_fcntl, SYS_fstat, SYS_futex, SYS_getegid, SYS_geteuid, SYS_getgid,
+    SYS_getpid, SYS_getrandom, SYS_getuid, SYS_ioctl, SYS_madvise, SYS_mmap, SYS_mprotect,
+    SYS_mremap, SYS_munmap, SYS_rt_sigprocmask, SYS_sched_yield, SYS_set_tid_address,
+    SYS_sigaltstack, SYS_write, SYS_writev, CLOCK_MONOTONIC, EACCES, EAGAIN, EINTR, EINVAL, EIO,
+    EMSGSIZE, ENOMEM, ENOSYS, ENOTSUP, FUTEX_BITSET_MATCH_ANY, FUTEX_CLOCK_REALTIME,
+    FUTEX_PRIVATE_FLAG, FUTEX_WAIT, FUTEX_WAIT_BITSET, FUTEX_WAKE, FUTEX_WAKE_BITSET,
+    MAP_ANONYMOUS, MAP_PRIVATE, PROT_EXEC, PROT_READ, PROT_WRITE, STDERR_FILENO, STDOUT_FILENO,
 };
 use sallyport::Error;
 use sgx::page::{Class, Flags};
@@ -124,6 +127,74 @@ const PHASE_MARK: usize = 1;
 const PHASE_ACK: usize = 2;
 const PHASE_AT_PHASE: usize = 8;
 const PHASE_AT_EXIT: usize = 16;
+
+/// Set when the payload marks phase 1 or a later one (`SYS_PHASE`: lind's
+/// IMFS grate marks phase 1 when it has staged its files and starts the
+/// build), and never cleared. A sealed keep serves only the syscalls that
+/// [`sealed_allows`], and asks the host only for what a thread may ask with
+/// its [`Tcb::host_permit`] set: console output, the dump commit, a new
+/// thread, and exit. Anything else ends the whole run rather than fails: a
+/// build step that got an error could take another path, one the host chose.
+static SEALED: AtomicBool = AtomicBool::new(false);
+
+/// What the keep exits with when it is sealed and asked for something else
+/// (128 + SIGSYS, as for a process that seccomp kills).
+const SEALED_EXIT: c_int = 128 + 31;
+
+/// The host file mapped writable with `SYS_MAPSHM` (the dump), or -1.
+static DUMP_FD: AtomicI32 = AtomicI32::new(-1);
+
+/// Whether the sealed keep committed the dump: it may do that once.
+static DUMP_COMMITTED: AtomicBool = AtomicBool::new(false);
+
+// Syscalls missing in `sallyport::libc`.
+const SYS_PRCTL: i64 = 157;
+const SYS_GETTID: i64 = 186;
+const SYS_TKILL: i64 = 200;
+const SYS_PROCESS_VM_WRITEV: i64 = 311;
+
+const CLOCK_PROCESS_CPUTIME_ID: clockid_t = 2;
+const CLOCK_THREAD_CPUTIME_ID: clockid_t = 3;
+
+/// Whether a sealed keep serves syscall `nr`, whose first argument is
+/// `arg0`. It serves each of them in the enclave, except that console output
+/// and the dump commit are sent to the host, and that the request behind
+/// `SYS_SALLY` is checked by [`Handler::sally`].
+#[allow(non_upper_case_globals)]
+fn sealed_allows(nr: i64, arg0: u64) -> bool {
+    let stdio = arg0 <= STDERR_FILENO as u64;
+    let console = arg0 == STDOUT_FILENO as u64 || arg0 == STDERR_FILENO as u64;
+    match nr {
+        // Memory.
+        SYS_mmap | SYS_munmap | SYS_mprotect | SYS_mremap | SYS_brk | SYS_madvise => true,
+        // Synchronization and threads.
+        SYS_futex | SYS_clone | SYS_exit | SYS_exit_group | SYS_sched_yield => true,
+        // What creating, forking and ending a thread takes besides (lind
+        // names its threads, and copies a cage's memory with
+        // `process_vm_writev` where it can): the shim keeps the signal mask
+        // and stack, and answers the rest with constants or ENOSYS.
+        SYS_set_tid_address
+        | SYS_rt_sigprocmask
+        | SYS_sigaltstack
+        | SYS_PRCTL
+        | SYS_GETTID
+        | SYS_TKILL
+        | SYS_getpid
+        | SYS_PROCESS_VM_WRITEV => true,
+        // The identity the shim reports (constants).
+        SYS_getuid | SYS_geteuid | SYS_getgid | SYS_getegid => true,
+        // Clocks (from the TSC) and random numbers (RDRAND).
+        SYS_clock_gettime | SYS_getrandom => true,
+        // Console output, and what a program asks about its standard
+        // streams, which the shim answers itself (no tty, a pipe).
+        SYS_write | SYS_writev => console,
+        SYS_fstat | SYS_fcntl | SYS_ioctl => stdio,
+        // The shim's own: phase marks, the dump commit, and a syscall taken
+        // through the direct entry that needs the host.
+        SYS_PHASE | SYS_COMMITSHM | SYS_SALLY => true,
+        _ => false,
+    }
+}
 
 /// What the shim did, counted in the enclave: the host cannot see the
 /// syscalls taken through the direct entry nor the pages committed ahead of
@@ -235,6 +306,34 @@ fn futex_waiter_count(key: usize) -> usize {
 // For `Handler::mmap_guest()`
 static ZERO: Page = Page::zeroed();
 
+/// A line of text formatted in the enclave, cut at 128 bytes.
+struct Line {
+    buf: [u8; 128],
+    len: usize,
+}
+
+impl Line {
+    const fn new() -> Self {
+        Self {
+            buf: [0; 128],
+            len: 0,
+        }
+    }
+
+    fn as_bytes(&self) -> &[u8] {
+        &self.buf[..self.len]
+    }
+}
+
+impl Write for Line {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        let n = s.len().min(self.buf.len() - self.len);
+        self.buf[self.len..self.len + n].copy_from_slice(&s.as_bytes()[..n]);
+        self.len += n;
+        Ok(())
+    }
+}
+
 fn is_prot_allowed(prot: c_int) -> bool {
     prot == PROT_READ || prot == (PROT_READ | PROT_WRITE) || prot == (PROT_READ | PROT_EXEC)
 }
@@ -323,6 +422,14 @@ impl<'a> Write for Handler<'a> {
 
 impl guest::Handler for Handler<'_> {
     fn sally(&mut self) -> sallyport::Result<()> {
+        // Every request reaches the host through here. Once the keep is
+        // sealed, only those the thread has a permit for do: whatever path
+        // led here, a bug above the shim cannot reach the host.
+        if SEALED.load(Ordering::Acquire) && !self.tcb.host_permit {
+            let (kind, number) = (self.block[1], self.block[2]);
+            self.sealed_refuse("host request of kind", kind as u64, number as u64);
+        }
+
         // prevent earlier writes from being moved beyond this point
         core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::Release);
 
@@ -446,8 +553,10 @@ impl guest::Handler for Handler<'_> {
             tls = tls.as_ptr()
         );
 
+        // Starting a thread on the host (the pool, or one more when no
+        // thread waits in the enclave) is allowed in a sealed keep.
         if !POOL_STARTED.swap(true, Ordering::SeqCst) {
-            self.start_thread_pool();
+            self.permit(|h| h.start_thread_pool());
         }
 
         let new_tid = THREAD_ID_CNT.fetch_add(1, Ordering::SeqCst);
@@ -474,7 +583,7 @@ impl guest::Handler for Handler<'_> {
 
         let addr = if *threads_free_guard == 0 {
             debugln!(self, "[{tid}] allocating new thread");
-            self.thread_mem_alloc().map_err(|_| EAGAIN)? as usize
+            self.permit(|h| h.thread_mem_alloc()).map_err(|_| EAGAIN)? as usize
         } else {
             *threads_free_guard -= 1;
             0
@@ -486,7 +595,7 @@ impl guest::Handler for Handler<'_> {
 
         NEW_THREAD_QUEUE.write().push(new_thread).unwrap();
 
-        let ret = self.spawn(addr);
+        let ret = self.permit(|h| h.spawn(addr));
         debugln!(self, "[{tid}] spawn() = {ret:#?}");
         ret?;
 
@@ -673,14 +782,38 @@ impl guest::Handler for Handler<'_> {
             // with, so the error never reaches it.
             return Err(EINTR);
         }
-        self.execute(sys::ExitGroup { status })??;
+        self.permit(|h| h.execute(sys::ExitGroup { status }))??;
         self.attacked()
+    }
+
+    fn writev<T: ?Sized, U>(&mut self, fd: c_int, iovs: &T) -> sallyport::Result<c_size_t>
+    where
+        for<'b> &'b T: IntoIterator<Item = &'b U>,
+        U: AsRef<[u8]>,
+    {
+        // Console output is kept like that of `write()`, in order with it.
+        if fd == STDOUT_FILENO || fd == STDERR_FILENO {
+            let mut written = 0;
+            for iov in iovs {
+                written += self.write(fd, iov.as_ref())?;
+            }
+            return Ok(written);
+        }
+        self.execute(sys::Writev { fd, iovs })?
+            .unwrap_or_else(|| self.attacked())
     }
 
     fn clock_gettime(&mut self, clockid: clockid_t, tp: &mut timespec) -> sallyport::Result<()> {
         let realtime = match clockid {
             CLOCK_REALTIME | CLOCK_REALTIME_COARSE => true,
             CLOCK_MONOTONIC | CLOCK_MONOTONIC_RAW | CLOCK_MONOTONIC_COARSE | CLOCK_BOOTTIME => {
+                false
+            }
+            // A sealed keep does not ask the host for its CPU time (glibc's
+            // `clock()`): the monotonic clock stands in for it.
+            CLOCK_PROCESS_CPUTIME_ID | CLOCK_THREAD_CPUTIME_ID
+                if SEALED.load(Ordering::Acquire) =>
+            {
                 false
             }
             _ => return self.execute(ClockGettime { clockid, tp })?,
@@ -898,6 +1031,11 @@ impl<'a> Handler<'a> {
                 }
                 OP_CPUID => {
                     count::CPUID.fetch_add(1, Ordering::Relaxed);
+                    // The host answers `cpuid` for the enclave.
+                    if SEALED.load(Ordering::Acquire) {
+                        let (leaf, subleaf) = (h.ssa.gpr.rax, h.ssa.gpr.rcx);
+                        h.sealed_refuse("cpuid", leaf, subleaf);
+                    }
                     h.handle_cpuid()
                 }
                 r => {
@@ -1064,7 +1202,12 @@ impl<'a> Handler<'a> {
         let encl_start = shim_address();
         let encl_end = encl_start + ENCL_SIZE;
         match addr.checked_add(length) {
-            Some(end) if addr != 0 && (end <= encl_start || addr >= encl_end) => Ok(addr),
+            Some(end) if addr != 0 && (end <= encl_start || addr >= encl_end) => {
+                if writable {
+                    DUMP_FD.store(fd, Ordering::Release);
+                }
+                Ok(addr)
+            }
             _ => self.attacked(),
         }
     }
@@ -1148,10 +1291,70 @@ impl<'a> Handler<'a> {
         n
     }
 
-    /// Write to a host file descriptor, bypassing the console buffer.
+    /// Write to a host file descriptor, bypassing the console buffer. A
+    /// sealed keep writes to the console only.
     fn write_host(&mut self, fd: c_int, buf: &[u8]) -> sallyport::Result<c_size_t> {
-        self.execute(sys::Write { fd, buf })?
-            .unwrap_or_else(|| self.attacked())
+        let ret = if fd == STDOUT_FILENO || fd == STDERR_FILENO {
+            self.permit(|h| h.execute(sys::Write { fd, buf }))
+        } else {
+            self.execute(sys::Write { fd, buf })
+        };
+        ret?.unwrap_or_else(|| self.attacked())
+    }
+
+    /// Run `f` with this thread allowed to ask the host for things although
+    /// the keep is sealed.
+    fn permit<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+        let outer = core::mem::replace(&mut self.tcb.host_permit, true);
+        let ret = f(self);
+        self.tcb.host_permit = outer;
+        ret
+    }
+
+    /// Seal the keep (see [`SEALED`]). Get first what serving the syscalls
+    /// a sealed keep allows could still need the host for, so that it never
+    /// does: the clock's anchor and the heap's mapping on the host.
+    fn seal(&mut self) {
+        if SEALED.load(Ordering::Acquire) {
+            return;
+        }
+        if !clock::ready() {
+            self.clock_init();
+        }
+        self.map_heap_on_host(&HEAP.read());
+        SEALED.store(true, Ordering::Release);
+    }
+
+    /// End the run: the sealed keep was asked for `what` (`a`, `b`), which
+    /// it does not serve. Say so on the console, then ask the host to exit
+    /// the process, the one thing still allowed. Never returns, so nothing
+    /// of the request goes further, and the payload never sees an error.
+    fn sealed_refuse(&mut self, what: &str, a: u64, b: u64) -> ! {
+        self.tcb.host_permit = true;
+        let mut line = Line::new();
+        let _ = writeln!(
+            line,
+            "[shim] sealed keep: refused {what} {a} ({b:#x}), exiting"
+        );
+        // Unless this thread holds the console lock: then it says nothing.
+        if let Some(mut console) = CONSOLE.try_lock() {
+            let kept = console.push(STDERR_FILENO as u8, line.as_bytes());
+            let shared = console.is_shared();
+            drop(console);
+            // The host writes out the shared console at exit, not the other.
+            if !shared {
+                self.flush_console();
+            }
+            if !kept {
+                let _ = self.write_host(STDERR_FILENO, line.as_bytes());
+            }
+        }
+        store_counters(PHASE_AT_EXIT);
+        loop {
+            let _ = self.execute(sys::ExitGroup {
+                status: SEALED_EXIT,
+            });
+        }
     }
 
     /// Write the buffered console output to the host.
@@ -1277,6 +1480,13 @@ impl<'a> Handler<'a> {
             );
         }
 
+        // Refused before anything of the syscall is copied to the block,
+        // which the host can read.
+        if SEALED.load(Ordering::Acquire) && !sealed_allows(nr as i64, self.ssa.gpr.rdi) {
+            let arg0 = self.ssa.gpr.rdi;
+            self.sealed_refuse("syscall", nr as u64, arg0);
+        }
+
         let usermemscope = UserMemScope;
 
         match nr as i64 {
@@ -1291,7 +1501,11 @@ impl<'a> Handler<'a> {
                 self.ssa.gpr.rdx = orig_rdx;
             }
             SYS_PHASE => {
-                self.phase(self.ssa.gpr.rdi);
+                let n = self.ssa.gpr.rdi;
+                if n >= 1 {
+                    self.seal();
+                }
+                self.phase(n);
                 self.ssa.gpr.rax = 0;
                 self.ssa.gpr.rdx = orig_rdx;
             }
@@ -1320,11 +1534,16 @@ impl<'a> Handler<'a> {
                 }
             }
             SYS_COMMITSHM => {
+                let (fd, length) = (self.ssa.gpr.rdi as c_int, self.ssa.gpr.rsi as usize);
+                // A sealed keep commits the dump, and only once.
+                if SEALED.load(Ordering::Acquire)
+                    && (fd != DUMP_FD.load(Ordering::Acquire)
+                        || DUMP_COMMITTED.swap(true, Ordering::SeqCst))
+                {
+                    self.sealed_refuse("dump commit of fd", fd as u64, length as u64);
+                }
                 let ret = self
-                    .execute(CommitShm {
-                        fd: self.ssa.gpr.rdi as c_int,
-                        length: self.ssa.gpr.rsi as usize,
-                    })
+                    .permit(|h| h.execute(CommitShm { fd, length }))
                     .and_then(|r| r);
                 match ret {
                     Err(e) => self.ssa.gpr.rax = -e as u64,
@@ -1987,5 +2206,99 @@ impl<'a> Handler<'a> {
         self.mmap_guest(addr, length, RWX);
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{sealed_allows, SYS_GETTID, SYS_PRCTL, SYS_PROCESS_VM_WRITEV, SYS_TKILL};
+    use sallyport::item::enarxcall::{
+        SYS_COMMITSHM, SYS_DIRECT_INIT, SYS_GETATT, SYS_GETKEY, SYS_MAPSHM, SYS_PHASE, SYS_SALLY,
+    };
+    use sallyport::libc::{
+        SYS_brk, SYS_clock_gettime, SYS_clone, SYS_close, SYS_exit, SYS_exit_group, SYS_fcntl,
+        SYS_fstat, SYS_futex, SYS_getegid, SYS_geteuid, SYS_getgid, SYS_getpid, SYS_getrandom,
+        SYS_getuid, SYS_ioctl, SYS_lseek, SYS_madvise, SYS_mmap, SYS_mprotect, SYS_mremap,
+        SYS_munmap, SYS_nanosleep, SYS_open, SYS_read, SYS_readv, SYS_rt_sigprocmask,
+        SYS_sched_yield, SYS_set_tid_address, SYS_sigaltstack, SYS_write, SYS_writev,
+    };
+
+    #[test]
+    fn sealed_keep_serves_the_whitelist() {
+        for nr in [
+            SYS_mmap,
+            SYS_munmap,
+            SYS_mprotect,
+            SYS_mremap,
+            SYS_brk,
+            SYS_madvise,
+            SYS_futex,
+            SYS_clone,
+            SYS_exit,
+            SYS_exit_group,
+            SYS_sched_yield,
+            SYS_set_tid_address,
+            SYS_rt_sigprocmask,
+            SYS_sigaltstack,
+            SYS_PRCTL,
+            SYS_GETTID,
+            SYS_TKILL,
+            SYS_getpid,
+            SYS_PROCESS_VM_WRITEV,
+            SYS_getuid,
+            SYS_geteuid,
+            SYS_getgid,
+            SYS_getegid,
+            SYS_clock_gettime,
+            SYS_getrandom,
+            SYS_PHASE,
+            SYS_COMMITSHM,
+            SYS_SALLY,
+        ] {
+            assert!(sealed_allows(nr, 0), "syscall {nr}");
+        }
+    }
+
+    #[test]
+    fn sealed_keep_writes_the_console_only() {
+        for nr in [SYS_write, SYS_writev] {
+            assert!(sealed_allows(nr, 1));
+            assert!(sealed_allows(nr, 2));
+            for fd in [0, 3, (1 << 32) | 1, u64::MAX] {
+                assert!(!sealed_allows(nr, fd), "syscall {nr} on fd {fd:#x}");
+            }
+        }
+    }
+
+    #[test]
+    fn sealed_keep_answers_standard_stream_queries_only() {
+        for nr in [SYS_fstat, SYS_fcntl, SYS_ioctl] {
+            for fd in [0, 1, 2] {
+                assert!(sealed_allows(nr, fd), "syscall {nr} on fd {fd}");
+            }
+            for fd in [3, (1 << 32) | 1, u64::MAX] {
+                assert!(!sealed_allows(nr, fd), "syscall {nr} on fd {fd:#x}");
+            }
+        }
+    }
+
+    #[test]
+    fn sealed_keep_takes_nothing_from_the_host() {
+        for nr in [
+            SYS_read,
+            SYS_readv,
+            SYS_lseek,
+            SYS_open,
+            SYS_close,
+            SYS_nanosleep,
+            SYS_MAPSHM,
+            SYS_GETATT,
+            SYS_GETKEY,
+            SYS_DIRECT_INIT,
+        ] {
+            for arg0 in [0, 1, 2, 3] {
+                assert!(!sealed_allows(nr, arg0), "syscall {nr} ({arg0})");
+            }
+        }
     }
 }
