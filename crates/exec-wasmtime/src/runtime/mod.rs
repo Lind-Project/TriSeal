@@ -2,6 +2,7 @@
 
 //! The Enarx Wasm runtime and all related functionality
 
+mod admission;
 mod identity;
 mod io;
 mod shm;
@@ -55,6 +56,10 @@ impl Runtime {
         if let Some(regions) = config.shm.as_ref() {
             shm::setup(regions).context("failed to set up the [shm] regions")?;
         }
+
+        // Have lind load only the modules in the compiled-in allowlist,
+        // from the workload on.
+        admission::register();
 
         // Hand the workload's phase marks (LIND_PHASE) to the shim, which
         // records them where the host can count from them.

@@ -1,0 +1,21 @@
+# Modules lind may load in this runtime: `sha256sum` lines (SHA-256 of the
+# module file, then a name for people). build.rs compiles them into
+# enarx-exec-wasmtime, so they are part of the keep's measurement; a module
+# whose SHA-256 is not here ends the run. Build with ENARX_CWASM_ALLOWLIST=<file>
+# to use another list. lind-boot --precompile reproduces each .cwasm from its
+# .wasm byte for byte, so every entry can be audited.
+#
+# The grates and toolchain of the evaluation (lind-server-3 ~/sgx-bench):
+# grates from triseal/grates/r3, toolchain from e2e/root-na/usr/local/bin.
+087635059a662b3e9f4ba1fbed96aa137a0fe40a5f948a009c664218c87c0e6e  imfs-grate.cwasm
+ef1036a1a2795b98e86cd38e865a228ae126b72e8412662508fcca633bac18b9  intoto-grate.cwasm
+9cbe6c8da7a42b6b64b2bc3f09551c0839ba813d0532f241fa620f219cb35635  ipc-grate.cwasm
+082641c60c088cd2587ee8adecd6aafbaaeb47f660f775ad077702dc7353bad6  make
+248e2d59ef999f62ab12d13f37b7d37450ab38c662ff30dc21167ffd3e040c13  gcc
+a94c67f88bd5d783dac62940d31ce54c205e5a71f348bf324d3aa6a02a61c759  cc1
+7a8f4f76e18b367c567e335ae615980114504acad8d6090f166767711552550e  as
+2bca9362da63a3158b2a0de084fb625cc2b1e2eaa9980b2ae176c9449b0c2ee6  ld
+5261920f060c7fe0f28ab89e838887e073544fd6a9b70482780a584351e5e344  ar
+3e8877d814a3b52ac5ac63991f1a448f5e012056e59472247ab126d65861d8c3  ranlib
+33d976ddc3389184b644f77502571d332b99929298f626ebecd39f6878c8990c  in-toto-cli.cwasm
+67070540066dc270512485f070be9b5dcafcff46288c8d5b06b797ed6e8f462c  twobuild.cwasm

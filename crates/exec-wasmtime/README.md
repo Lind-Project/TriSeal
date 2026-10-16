@@ -43,5 +43,16 @@ from file descriptor 3, so this would be equivalent:
 $ RUST_LOG=enarx-exec-wasmtime=info RUST_BACKTRACE=1 cargo run -- 3< return_1.wasm
  ```
 
+### Module allowlist
+
+lind loads only the modules (`.cwasm` or `.wasm`) whose SHA-256 is in
+`cwasm-allowlist.txt`, which is compiled in and so is part of the keep's
+measurement. Any other module, whether it is the workload, a grate or a tool
+a build execs, ends the run with status 126. To run other modules, list them
+(`sha256sum *.cwasm` output) in a file and build with
+`ENARX_CWASM_ALLOWLIST=<file>`; the keep then has another measurement.
+`lind-boot --precompile` reproduces a `.cwasm` from its `.wasm` byte for byte,
+so anyone can check what an entry is.
+
 
 License: Apache-2.0
