@@ -56,3 +56,24 @@ so anyone can check what an entry is.
 
 
 License: Apache-2.0
+
+### in-toto attestation of a run
+
+Every workload run produces two in-toto attestations: `run-start` right before the
+lind-wasm runtime (`lind_boot::execute_wasmtime`) starts and `run-end` right after it
+returns. Each is an in-toto Statement v1 inside a DSSE v1 envelope, signed with the keep
+identity key (P-256 on SGX/KVM), the key whose hash is bound into the TEE attestation
+report. See `crates/enarx-config/Enarx_toml.md` (`intoto`) for the configuration and the
+predicate contents.
+
+```toml
+[intoto]
+dir = "/var/lib/enarx/attestations"   # unset: printed to stderr
+```
+
+Files written per run `<id>`: `lind-wasm-run-start.<id>.intoto.json`,
+`lind-wasm-run-end.<id>.intoto.json` and `lind-wasm-signer.<id>.pub.json` (public key in
+in-toto/securesystemslib format). To verify, base64-decode `payload`, rebuild the DSSE
+PAE `DSSEv1 <len> application/vnd.in-toto+json <len> <payload>` and check `sig`
+(base64, ASN.1 ECDSA-P256-SHA256) against the public key; `run-end` carries the sha256 of
+the `run-start` file so the two can be tied together.

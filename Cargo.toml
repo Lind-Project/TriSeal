@@ -158,6 +158,7 @@ colorful = { version = "0.2.0", default-features = false }
 const-default = { version = "1.0.0", default-features = false }
 const-oid = { version = "0.9.5", default-features = false }
 crt0stack = { version = "0.1.0", default-features = false }
+data-encoding = { version = "2.4.0", features = ["std"], default-features = false }
 der = { version = "0.7.8", features = ["derive", "std"], default-features = false }
 dirs = { version = "4.0.0", default-features = false }
 enarx-exec-wasmtime = { version = "0.7.1", path = "crates/exec-wasmtime", default-features = false }
@@ -168,6 +169,7 @@ gdbstub = { version = "0.5.0", default-features = false }
 gdbstub_arch = { version = "0.1.1", default-features = false }
 goblin = { version = "0.6.0", features = ["elf64"], default-features = false }
 hex = { version = "0.4.3", features = ["std"], default-features = false }
+in-toto = { version = "0.4.0", default-features = false }
 http-types = { version = "2.12.0", default-features = false }
 io-extras = { version = "=0.17.0", default-features = false }
 iocuddle = { version = "0.1.1", default-features = false }

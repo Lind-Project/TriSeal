@@ -87,6 +87,26 @@ fn csr(pki: &PrivateKeyInfo<'_>, exts: Vec<Extension>) -> anyhow::Result<Vec<u8>
     .context("failed to encode CSR")
 }
 
+/// Name of the TEE technology the keep runs on: `sgx`, `snp` or `kvm`.
+pub fn technology() -> anyhow::Result<&'static str> {
+    let platform = Platform::get().context("failed to query platform")?;
+    Ok(match platform.technology() {
+        Technology::Sgx => "sgx",
+        Technology::Snp => "snp",
+        Technology::Kvm => "kvm",
+    })
+}
+
+/// DER-encoded `SubjectPublicKeyInfo` of a PKCS#8 private key produced by [`generate`].
+pub fn public_key_der(key: impl AsRef<[u8]>) -> anyhow::Result<Vec<u8>> {
+    let pki = PrivateKeyInfo::from_der(key.as_ref())
+        .context("failed to parse DER-encoded private key")?;
+    pki.public_key()
+        .context("failed to get public key")?
+        .to_der()
+        .context("failed to get der-encoded public key")
+}
+
 /// Generates a new private key and corresponding CSR
 #[instrument]
 pub fn generate() -> anyhow::Result<(Zeroizing<Vec<u8>>, Vec<u8>)> {

@@ -42,6 +42,37 @@ args = [
 steward = "https://attest.profian.com"
 ```
 
+### `intoto`
+
+`intoto` configures the in-toto attestation of the run. Two attestations are produced per
+run, one right before the lind-wasm runtime starts (`run-start`) and one right after it ends
+(`run-end`). Each is an in-toto Statement v1 in a DSSE v1 envelope, signed with the keep
+identity key, so it chains to the TEE attestation of the keep.
+
+| key        | default | meaning                                                                 |
+|------------|---------|-------------------------------------------------------------------------|
+| `dir`      | unset   | Host directory the files are written to. Unset: printed to stderr.      |
+| `stderr`   | `false` | Also print the attestations to stderr when `dir` is set.                |
+| `disabled` | `false` | Do not produce attestations.                                            |
+
+With `dir` set, every run `<id>` writes three files there:
+
+* `lind-wasm-run-start.<id>.intoto.json`: subject `main.wasm` (sha256/sha512 of the module),
+  predicate `https://lind-project.org/attestation/lind-wasm/run-start/v1` with the guest
+  argv/env/preloads, the TEE technology, the keep identity key and certificate digests, and
+  the signer.
+* `lind-wasm-run-end.<id>.intoto.json`: same subject, predicate
+  `https://lind-project.org/attestation/lind-wasm/run-end/v1` with the exit code or runtime
+  error, the duration, and the sha256 of the `run-start` file.
+* `lind-wasm-signer.<id>.pub.json`: the public key in in-toto (securesystemslib) format.
+
+#### Example
+
+```toml
+[intoto]
+dir = "/var/lib/enarx/attestations"
+```
+
 ### `files`
 
 `files` specifies an array of file descriptor definitions to be pre-opened for the WASM application.
