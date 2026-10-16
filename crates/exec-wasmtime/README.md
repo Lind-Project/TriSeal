@@ -77,3 +77,10 @@ in-toto/securesystemslib format). To verify, base64-decode `payload`, rebuild th
 PAE `DSSEv1 <len> application/vnd.in-toto+json <len> <payload>` and check `sig`
 (base64, ASN.1 ECDSA-P256-SHA256) against the public key; `run-end` carries the sha256 of
 the `run-start` file so the two can be tied together.
+
+When the workload's first cage records evidence of its own (the in-toto grate), `run-end` is
+signed when that cage hands in its key and the hash of the last link of its chain (lind's
+`LIND_EVIDENCE`, see `src/runtime/attest.rs`), names both, and goes back to the workload
+with `run-start`, the identity key and the attestation report (on SGX, enarx's DER evidence:
+the quote, whose report data is the SHA-256 of the identity key's SPKI, and Intel's CRLs and
+TCB info), so that the recorder's whole chain is anchored to the quote.

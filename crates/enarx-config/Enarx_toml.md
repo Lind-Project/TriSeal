@@ -66,6 +66,13 @@ With `dir` set, every run `<id>` writes three files there:
   error, the duration, and the sha256 of the `run-start` file.
 * `lind-wasm-signer.<id>.pub.json`: the public key in in-toto (securesystemslib) format.
 
+A workload that records its own evidence (the in-toto grate) gets `run-end` during the run
+instead: its first cage hands in the key it signs with and the hash of the last statement of
+its chain (lind's `LIND_EVIDENCE`), and `run-end`, which names both, goes back to it with
+`run-start`, the identity key and the TEE attestation report, to be dumped with the build's
+outputs. No `run-end` file is written then; once the build has started, a sealed keep lets
+nothing out but its console and dump region.
+
 #### Example
 
 ```toml

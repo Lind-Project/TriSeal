@@ -107,9 +107,11 @@ pub fn public_key_der(key: impl AsRef<[u8]>) -> anyhow::Result<Vec<u8>> {
         .context("failed to get der-encoded public key")
 }
 
-/// Generates a new private key and corresponding CSR
+/// Generates a new private key, the corresponding CSR and the TEE
+/// attestation report (SGX: a quote) whose report data is the hash of the
+/// public key
 #[instrument]
-pub fn generate() -> anyhow::Result<(Zeroizing<Vec<u8>>, Vec<u8>)> {
+pub fn generate() -> anyhow::Result<(Zeroizing<Vec<u8>>, Vec<u8>, Vec<u8>)> {
     let platform = Platform::get().context("failed to query platform")?;
     let cert_algo = match platform.technology() {
         Technology::Snp => SECP_384_R_1,
@@ -145,14 +147,14 @@ pub fn generate() -> anyhow::Result<(Zeroizing<Vec<u8>>, Vec<u8>)> {
     let ext = vec![Extension {
         extn_id: platform.technology().into(),
         critical: false,
-        extn_value: OctetString::new(attestation_report)
+        extn_value: OctetString::new(attestation_report.clone())
             .context("failed to wrap attestation evidence in `OctetString`")?,
     }];
 
     // Make a certificate signing request.
     let req = csr(&pki, ext).context("failed to generate a CSR")?;
 
-    Ok((raw, req))
+    Ok((raw, req, attestation_report))
 }
 
 #[instrument(skip(csr))]

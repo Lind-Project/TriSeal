@@ -33,7 +33,7 @@ impl Runtime {
         let workload: Workload = package.try_into()?;
         let config = workload.config.clone().unwrap_or_default();
 
-        let (prvkey, crtreq) =
+        let (prvkey, crtreq, report) =
             identity::generate().context("failed to generate a private key and CSR")?;
         let certs = if let Some(url) = config.steward.as_ref() {
             identity::steward(url, crtreq).context("failed to attest to Steward")?
@@ -92,6 +92,7 @@ impl Runtime {
             identity_spki: &identity_spki,
             certificates: &certs,
             steward: config.steward.as_ref(),
+            report: &report,
         };
         let attestor = attest::Attestor::new(&config.intoto, keep, &workload.webasm)
             .context("failed to set up in-toto attestation")?
@@ -107,6 +108,16 @@ impl Runtime {
                     preloads: &options.preloads,
                 })
                 .context("failed to emit in-toto run-start attestation")?;
+
+            // The workload's recorder hands in its key and chain (LIND_EVIDENCE)
+            // and gets run-end back, signed with the identity key.
+            let attestor = attestor.clone();
+            rawposix::evidence::register(Box::new(move |request| {
+                attestor.lock().unwrap().evidence(request).map_err(|e| {
+                    eprintln!("[in-toto] cannot sign run-end for the recorder: {e:#}");
+                    -libc::EINVAL
+                })
+            }));
         }
 
         rawposix_start(0);
@@ -115,7 +126,8 @@ impl Runtime {
             rawposix_shutdown();
         }
 
-        // -- in-toto: attest how the run ended, even when the runtime failed --
+        // -- in-toto: attest how the run ended, even when the runtime failed,
+        // unless run-end went to the workload's recorder already --
         let attested = attestor
             .as_ref()
             .map(|attestor| {

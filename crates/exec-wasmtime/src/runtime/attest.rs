@@ -11,6 +11,15 @@
 //! * `run-end` records how the run ended: the exit code or the runtime error, the
 //!   wall-clock duration, and the digest of the `run-start` attestation it belongs to.
 //!
+//! A run whose workload records its own evidence (the in-toto grate, which signs
+//! a chain of statements over the build's inputs and outputs with a key it made)
+//! gets its `run-end` earlier, from [`Attestor::evidence`]: when the workload's
+//! first cage hands in its key and the hash of the last link of its chain
+//! (lind's `LIND_EVIDENCE`), `run-end` names both and goes back to the workload
+//! together with `run-start`, the identity key and the TEE attestation report,
+//! which binds that key. The chain is then anchored to the report, and all of it
+//! leaves the keep with the workload's output.
+//!
 //! Each attestation is an [in-toto Statement v1](https://github.com/in-toto/attestation/blob/main/spec/v1/statement.md)
 //! wrapped in a [DSSE v1 envelope](https://github.com/secure-systems-lab/dsse/blob/master/envelope.md).
 //! The envelope is signed with the keep identity key, i.e. the key whose public-key
@@ -23,7 +32,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, SecondsFormat, Utc};
 use const_oid::db::rfc5912::SECP_256_R_1;
 use data_encoding::BASE64;
@@ -63,6 +72,9 @@ pub struct KeepInfo<'a> {
     pub certificates: &'a [Vec<u8>],
     /// Steward the keep attested to, if any
     pub steward: Option<&'a Url>,
+    /// TEE attestation report whose report data is the hash of `identity_spki`
+    /// (SGX: a quote)
+    pub report: &'a [u8],
 }
 
 /// What lind-wasm is asked to run.
@@ -102,6 +114,10 @@ pub struct Attestor {
     echo: bool,
     started_at: Option<DateTime<Utc>>,
     start_sha256: Option<String>,
+    report: Vec<u8>,
+    start_envelope: Option<Vec<u8>>,
+    /// Whether `run-end` went to the workload's recorder ([`Attestor::evidence`])
+    delivered: bool,
 }
 
 impl Attestor {
@@ -127,6 +143,7 @@ impl Attestor {
             },
         });
 
+        let report = keep.report.to_vec();
         let keep = json!({
             "technology": keep.technology,
             "identityKey": { "sha256": hex::encode(Sha256::digest(keep.identity_spki)) },
@@ -136,6 +153,7 @@ impl Attestor {
                 .map(|der| json!({ "sha256": hex::encode(Sha256::digest(der)) }))
                 .collect::<Vec<_>>(),
             "steward": keep.steward.map(Url::as_str),
+            "report": { "sha256": hex::encode(Sha256::digest(keep.report)) },
         });
 
         let (sink, echo) = match &cfg.dir {
@@ -153,6 +171,9 @@ impl Attestor {
             echo,
             started_at: None,
             start_sha256: None,
+            report,
+            start_envelope: None,
+            delivered: false,
         }))
     }
 
@@ -187,6 +208,7 @@ impl Attestor {
 
         let envelope = self.envelope(PREDICATE_RUN_START, predicate)?;
         self.start_sha256 = Some(hex::encode(Sha256::digest(&envelope)));
+        self.start_envelope = Some(envelope.clone());
 
         // The verifier needs the public key; write it next to the attestations.
         let public = serde_json::to_vec_pretty(self.key.public())
@@ -196,8 +218,78 @@ impl Attestor {
         Ok(())
     }
 
+    /// Signs `run-end` for the workload's recorder and returns what goes back to
+    /// it (see the module documentation). `request` is the JSON the recorder
+    /// handed in: `{"recorder": {"publicKey": <key>}, "chain": {"head":
+    /// {"sha256": <hex>}, "links": <n>}}`. The answer is JSON too: `runId`,
+    /// `identityKey` (the public key run-start and run-end are signed with),
+    /// `report` (base64), and `runStart` and `runEnd`, each the exact bytes of
+    /// the envelope as a string, as hashed in `run-end` and by a verifier.
+    ///
+    /// Nothing is written out here: by now the keep may let nothing but its
+    /// console and dump region out.
+    pub fn evidence(&mut self, request: &[u8]) -> Result<Vec<u8>> {
+        if self.delivered {
+            bail!("the run's evidence was handed in already");
+        }
+        let started_at = self
+            .started_at
+            .ok_or_else(|| anyhow!("evidence handed in before run-start"))?;
+        let start_envelope = self
+            .start_envelope
+            .clone()
+            .ok_or_else(|| anyhow!("evidence handed in before run-start"))?;
+
+        let request: Value =
+            serde_json::from_slice(request).context("evidence request is not JSON")?;
+        let public_key = &request["recorder"]["publicKey"];
+        let keyid = public_key["keyid"]
+            .as_str()
+            .filter(|k| is_sha256_hex(k))
+            .ok_or_else(|| anyhow!("evidence request: no recorder key id"))?;
+        let head = request["chain"]["head"]["sha256"]
+            .as_str()
+            .filter(|h| is_sha256_hex(h))
+            .ok_or_else(|| anyhow!("evidence request: no chain head"))?;
+        let links = request["chain"]["links"]
+            .as_u64()
+            .ok_or_else(|| anyhow!("evidence request: no chain length"))?;
+
+        let finished_at = Utc::now();
+        let predicate = json!({
+            "runId": self.run_id,
+            "startedAt": rfc3339(&started_at),
+            "finishedAt": rfc3339(&finished_at),
+            "durationMs": (finished_at - started_at).num_milliseconds(),
+            "startAttestation": { "sha256": self.start_sha256 },
+            "recorder": { "publicKey": public_key, "keyid": keyid },
+            "chain": { "head": { "sha256": head }, "links": links },
+            "signer": self.signer(),
+        });
+        let run_end = self.envelope(PREDICATE_RUN_END, predicate)?;
+        self.delivered = true;
+
+        let answer = json!({
+            "runId": self.run_id,
+            "identityKey": serde_json::to_value(self.key.public())
+                .context("failed to serialize in-toto public key")?,
+            "report": BASE64.encode(&self.report),
+            "runStart": String::from_utf8(start_envelope)?,
+            "runEnd": String::from_utf8(run_end)?,
+        });
+        eprintln!(
+            "[in-toto] run-end signed for the recorder: key {}, chain of {links}, head {head}",
+            &keyid[..16]
+        );
+        serde_json::to_vec(&answer).context("failed to serialize the evidence answer")
+    }
+
     /// Emits the `run-end` attestation. Call right after lind-wasm returns.
+    /// Does nothing if `run-end` went to the workload's recorder already.
     pub fn end(&mut self, outcome: Outcome<'_>) -> Result<()> {
+        if self.delivered {
+            return Ok(());
+        }
         let started_at = self
             .started_at
             .ok_or_else(|| anyhow!("run-end attestation requested before run-start"))?;
@@ -333,6 +425,10 @@ pub fn pae(payload_type: &str, payload: &[u8]) -> Vec<u8> {
     out
 }
 
+fn is_sha256_hex(s: &str) -> bool {
+    s.len() == 64 && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+}
+
 fn rfc3339(t: &DateTime<Utc>) -> String {
     t.to_rfc3339_opts(SecondsFormat::Millis, true)
 }
@@ -386,6 +482,7 @@ mod tests {
             identity_spki: b"spki",
             certificates: certs,
             steward: None,
+            report: b"report",
         }
     }
 
@@ -578,6 +675,71 @@ mod tests {
             &public,
         );
         assert_eq!(start["predicate"]["signer"]["isKeepIdentityKey"], false);
+    }
+
+    fn evidence_request(head: &str) -> Vec<u8> {
+        json!({
+            "recorder": { "publicKey": { "keytype": "ecdsa", "keyid": "ab".repeat(32) } },
+            "chain": { "head": { "sha256": head }, "links": 3 },
+        })
+        .to_string()
+        .into_bytes()
+    }
+
+    #[test]
+    fn evidence_anchors_the_recorder_chain() {
+        let dir = tempfile::tempdir().unwrap();
+        let key = p256_pkcs8();
+        let mut a = Attestor::new(&cfg(Some(dir.path().into())), keep(&key, &[]), b"wasm")
+            .unwrap()
+            .unwrap();
+        assert!(a.evidence(&evidence_request(&"cd".repeat(32))).is_err());
+        a.start(&Invocation {
+            argv: &[],
+            env: &HashMap::new(),
+            preloads: &[],
+        })
+        .unwrap();
+        assert!(a.evidence(&evidence_request("not a digest")).is_err());
+
+        let answer: Value =
+            serde_json::from_slice(&a.evidence(&evidence_request(&"cd".repeat(32))).unwrap())
+                .unwrap();
+        assert_eq!(answer["runId"], a.run_id);
+        assert_eq!(
+            BASE64
+                .decode(answer["report"].as_str().unwrap().as_bytes())
+                .unwrap(),
+            b"report"
+        );
+        let public: PublicKey = serde_json::from_value(answer["identityKey"].clone()).unwrap();
+        let start_bytes = answer["runStart"].as_str().unwrap().as_bytes();
+        let start = verify(start_bytes, &public);
+        assert_eq!(start["predicateType"], PREDICATE_RUN_START);
+        assert_eq!(
+            start["predicate"]["keep"]["report"]["sha256"],
+            hex::encode(Sha256::digest(b"report"))
+        );
+        let end = verify(answer["runEnd"].as_str().unwrap().as_bytes(), &public);
+        assert_eq!(end["predicateType"], PREDICATE_RUN_END);
+        let p = &end["predicate"];
+        assert_eq!(p["runId"], a.run_id);
+        assert_eq!(p["recorder"]["keyid"], "ab".repeat(32));
+        assert_eq!(p["recorder"]["publicKey"]["keytype"], "ecdsa");
+        assert_eq!(p["chain"]["head"]["sha256"], "cd".repeat(32));
+        assert_eq!(p["chain"]["links"], 3);
+        assert_eq!(
+            p["startAttestation"]["sha256"],
+            hex::encode(Sha256::digest(start_bytes))
+        );
+
+        // Once only, and the run-end after lind returns is not written again.
+        assert!(a.evidence(&evidence_request(&"cd".repeat(32))).is_err());
+        a.end(Outcome::Exited(0)).unwrap();
+        let run_end = dir
+            .path()
+            .join(format!("lind-wasm-run-end.{}.intoto.json", a.run_id));
+        assert!(!run_end.exists());
     }
 
     #[test]
