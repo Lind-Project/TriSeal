@@ -11,11 +11,15 @@
 #          2. stops and has it attested: the in-toto grate reads the archive
 #             out of IMFS memory, hashes every file and signs a statement,
 #          3. resumes with the sources, and stops again to have them attested,
-#          4. runs make; at exit lua, luac and the attestations go into one
-#             dump archive, copied to shared memory and committed with one
-#             ocall
+#          4. runs make; at exit the in-toto grate signs a products
+#             statement over lua and luac, the last link, and hands its key
+#             and the hash of that link to the runtime, which signs run-end
+#             naming both with the key the SGX quote binds; lua, luac and the
+#             evidence the in-toto grate assembles go into one dump archive
+#             in shared memory
 #   host   the dump is unpacked into the work directory, lua is run, and the
-#          attestations are checked against the bundle (verify-attest.py)
+#          evidence is checked against the bundle and the outputs, up to the
+#          quote (verify-attest.py)
 #
 # Needs the staged tree from stage.sh under $E, the grates from
 # lind-wasm-example-grates (branch imfs-preload-attest), mkpreload, and a
@@ -29,6 +33,8 @@
 #               grate (and so without attestation)
 #   TAMPER=1    flip the last byte of the bundle after packing (a byte of the
 #               last source file): the keep must refuse to run
+#   KEEP_BUNDLE=1  keep a copy of the bundle as <workdir>/bundle.prld, to
+#               check the evidence again later (verify-attest.py)
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 E=${E:-$HOME/sgx-bench/e2e}
@@ -116,7 +122,12 @@ if [ -s "$DUMP" ]; then
     echo "lua: $(file -b "$W/dump/out/lua" | cut -c1-60)"
     "$W/dump/out/lua" -e 'print(_VERSION, 2^10, string.format("%q", "ok"))'
   fi
-  [ -d "$W/dump/attest" ] && python3 "$HERE/e2e/verify-attest.py" "$W/dump/attest" "$BUNDLE"
+  # The evidence (evidence/, or attest/ from an older recorder) against the
+  # bundle and the dumped outputs.
+  if [ -d "$W/dump/evidence" ] || [ -d "$W/dump/attest" ]; then
+    python3 "$HERE/e2e/verify-attest.py" "$W/dump" "$BUNDLE"
+  fi
 fi
+[ "${KEEP_BUNDLE:-0}" = 1 ] && cp "$BUNDLE" "$W/bundle.prld"
 rm -f "$BUNDLE" "$DUMP"
 exit $rc
