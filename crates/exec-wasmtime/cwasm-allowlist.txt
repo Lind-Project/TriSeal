@@ -5,11 +5,17 @@
 # to use another list. lind-boot --precompile reproduces each .cwasm from its
 # .wasm byte for byte, so every entry can be audited.
 #
-# The grates and toolchain of the evaluation (lind-server-3 ~/sgx-bench):
-# grates from triseal/grates/r3, toolchain from e2e/root-na/usr/local/bin.
-087635059a662b3e9f4ba1fbed96aa137a0fe40a5f948a009c664218c87c0e6e  imfs-grate.cwasm
-ef1036a1a2795b98e86cd38e865a228ae126b72e8412662508fcca633bac18b9  intoto-grate.cwasm
+# Built on lind-server-3 (~/sgx-bench), 2026-10-17.
+#
+# Grates: lind-wasm-example-grates main b9ae5df, `cargo-lind_compile --release`
+# in grates-main/rust-grates/<grate> (the .wasm also depends on the directory
+# it is built in), precompiled with the lind-boot of lind-wasm enarx-7-13
+# 82784940c.
+97d903867f69a9146f15d40559fb30e1868b12dfbc911b82395c91585b078e85  imfs-grate.cwasm
+c614ed46cdab77686eafc7c6b9c6efe9c907ab1cf22b7157bb5eff1f2fb61f85  intoto-grate.cwasm
 9cbe6c8da7a42b6b64b2bc3f09551c0839ba813d0532f241fa620f219cb35635  ipc-grate.cwasm
+# The build toolchain (e2e/root-na/usr/local/bin; cc1, as and ld without
+# asyncify) and the in-toto CLI.
 082641c60c088cd2587ee8adecd6aafbaaeb47f660f775ad077702dc7353bad6  make
 248e2d59ef999f62ab12d13f37b7d37450ab38c662ff30dc21167ffd3e040c13  gcc
 a94c67f88bd5d783dac62940d31ce54c205e5a71f348bf324d3aa6a02a61c759  cc1
@@ -18,4 +24,10 @@ a94c67f88bd5d783dac62940d31ce54c205e5a71f348bf324d3aa6a02a61c759  cc1
 5261920f060c7fe0f28ab89e838887e073544fd6a9b70482780a584351e5e344  ar
 3e8877d814a3b52ac5ac63991f1a448f5e012056e59472247ab126d65861d8c3  ranlib
 33d976ddc3389184b644f77502571d332b99929298f626ebecd39f6878c8990c  in-toto-cli.cwasm
+# Programs the evaluation scripts run (triseal/build): two builds in one keep,
+# and the microbenchmarks with the programs they exec.
 67070540066dc270512485f070be9b5dcafcff46288c8d5b06b797ed6e8f462c  twobuild.cwasm
+e7d0220f83816a203bd776ae4816db94c0a31783be5e0ebec8b940f060210407  microbench.cwasm
+672724f484a7dacfd6e8bd7028d7017839be4f3099d1cff712b79bb68c1792f4  hello.cwasm
+c4a59a374315b87da880ee4b1c0ec046d8c4008e44d3d2ac00a8f8c61d5a493d  nop.cwasm
+f590819e1078daae791d58d7d4afc8b7fd44b5913f4d527fa54d317e2f462200  handoff.cwasm
