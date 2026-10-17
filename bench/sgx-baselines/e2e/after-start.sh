@@ -16,6 +16,7 @@
 #            (GRAMINE_DBG), every enclave (one per process) counted.
 #
 # Usage: OUT=<dir> e2e/after-start.sh     (then after-start.py <dir>)
+#   TRISEAL_SETUPS  which of preloads, shm to count (default both)
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 E=${E:-$HOME/sgx-bench/e2e}
@@ -24,15 +25,20 @@ ENARX_STATS=${ENARX_STATS:-$E/ze/TriSeal-s/target/release/enarx}
 GRAMINE_DBG=${GRAMINE_DBG:-$HOME/sgx-bench/gramine-dbg}
 mkdir -p "$OUT"
 
-echo "== triseal-preloads" >&2
-ENARX_SGX_STATS=y ENARX=$ENARX_STATS "$HERE/lua-triseal.sh" "$E/work-as-triseal" \
-  >"$OUT/triseal-preloads.out" 2>&1
-cp "$E/work-as-triseal/build.log" "$OUT/triseal-preloads.log"
+SETUPS=${TRISEAL_SETUPS:-preloads shm}
+if [[ " $SETUPS " == *" preloads "* ]]; then
+  echo "== triseal-preloads" >&2
+  ENARX_SGX_STATS=y ENARX=$ENARX_STATS "$HERE/lua-triseal.sh" "$E/work-as-triseal" \
+    >"$OUT/triseal-preloads.out" 2>&1
+  cp "$E/work-as-triseal/build.log" "$OUT/triseal-preloads.log"
+fi
 
-echo "== triseal-shm" >&2
-ENARX_SGX_STATS=y ENARX=$ENARX_STATS "$HERE/lua-triseal-shm.sh" "$E/work-as-triseal-shm" \
-  >"$OUT/triseal-shm.out" 2>&1
-cp "$E/work-as-triseal-shm/build.log" "$OUT/triseal-shm.log"
+if [[ " $SETUPS " == *" shm "* ]]; then
+  echo "== triseal-shm" >&2
+  ENARX_SGX_STATS=y ENARX=$ENARX_STATS "$HERE/lua-triseal-shm.sh" "$E/work-as-triseal-shm" \
+    >"$OUT/triseal-shm.out" 2>&1
+  cp "$E/work-as-triseal-shm/build.log" "$OUT/triseal-shm.log"
+fi
 
 for kind in build probe; do
   probe=0

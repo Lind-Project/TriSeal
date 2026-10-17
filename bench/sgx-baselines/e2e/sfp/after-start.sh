@@ -12,6 +12,7 @@
 #            (strace -f -c), build minus probe (`make --version`). Occlum
 #            has no counters of its own, so this is its ocall measure.
 # Usage: e2e/sfp/after-start.sh     (OUT=<dir>; one subdirectory per program)
+#   TRISEAL_SETUPS  which of preloads, shm to count (default both)
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 . "$HERE/sfp.conf"
@@ -22,14 +23,20 @@ ENARX_STATS=${ENARX_STATS:-$E/ze/TriSeal-s/target/release/enarx}
 GRAMINE_DBG=${GRAMINE_DBG:-$HOME/sgx-bench/gramine-dbg}
 genclave() { case $1 in gcc) echo "${GRAMINE_ENCLAVE_gcc:-4G}" ;; *) echo "${GRAMINE_ENCLAVE:-1G}" ;; esac; }
 PROGS=${PROGS:-${SFP_PROGS[*]}}
+SETUPS=${TRISEAL_SETUPS:-preloads shm}
+has() { [[ " $SETUPS " == *" $1 "* ]]; }
 for p in $PROGS; do
   o=$OUT/$p
   mkdir -p "$o"
   echo "== $p triseal stats $(date +%T)" >&2
-  ENARX_SGX_STATS=y ENARX=$ENARX_STATS "$HERE/triseal.sh" "$p" "$E/work-sfp-as-triseal" >"$o/triseal-preloads.out" 2>&1
-  cp "$E/work-sfp-as-triseal/build.log" "$o/triseal-preloads.log"
-  ENARX_SGX_STATS=y ENARX=$ENARX_STATS "$HERE/triseal-shm.sh" "$p" "$E/work-sfp-as-triseal-shm" >"$o/triseal-shm.out" 2>&1
-  cp "$E/work-sfp-as-triseal-shm/build.log" "$o/triseal-shm.log"
+  if has preloads; then
+    ENARX_SGX_STATS=y ENARX=$ENARX_STATS "$HERE/triseal.sh" "$p" "$E/work-sfp-as-triseal" >"$o/triseal-preloads.out" 2>&1
+    cp "$E/work-sfp-as-triseal/build.log" "$o/triseal-preloads.log"
+  fi
+  if has shm; then
+    ENARX_SGX_STATS=y ENARX=$ENARX_STATS "$HERE/triseal-shm.sh" "$p" "$E/work-sfp-as-triseal-shm" >"$o/triseal-shm.out" 2>&1
+    cp "$E/work-sfp-as-triseal-shm/build.log" "$o/triseal-shm.log"
+  fi
   for kind in build probe; do
     probe=0
     [ $kind = probe ] && probe=1
@@ -40,9 +47,9 @@ for p in $PROGS; do
       "$HERE/gramine.sh" "$p" "$E/work-sfp-as-gramine" >"$o/gramine.$kind.out" 2>&1
     cp "$E/work-sfp-as-gramine.log" "$o/gramine.$kind.log"
     echo "== $p strace $kind $(date +%T)" >&2
-    TRACE="strace -f -c -o $o/strace.triseal.$kind.txt" PROBE=$probe \
+    has preloads && TRACE="strace -f -c -o $o/strace.triseal.$kind.txt" PROBE=$probe \
       "$HERE/triseal.sh" "$p" "$E/work-sfp-as-triseal" >"$o/strace.triseal.$kind.out" 2>&1
-    TRACE="strace -f -c -o $o/strace.triseal-shm.$kind.txt" PROBE=$probe \
+    has shm && TRACE="strace -f -c -o $o/strace.triseal-shm.$kind.txt" PROBE=$probe \
       "$HERE/triseal-shm.sh" "$p" "$E/work-sfp-as-triseal-shm" >"$o/strace.triseal-shm.$kind.out" 2>&1
     TRACE="strace -f -c -o $o/strace.gramine-encrypted.$kind.txt" PROBE=$probe MODE=encrypted \
       ENCLAVE_SIZE=$(genclave "$p") "$HERE/gramine.sh" "$p" "$E/work-sfp-as-gramine" \

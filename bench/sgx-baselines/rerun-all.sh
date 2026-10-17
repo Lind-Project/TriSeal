@@ -7,6 +7,13 @@
 #                       mount)
 #   2-fs-microbench/    file-compare.sh: file I/O, host syscalls per call
 #                       (TriSeal: IMFS; Gramine: its encrypted mount)
+# TriSeal runs in its full setup only (TRISEAL_SETUPS=shm, the default): the
+# inputs in shared memory, attested by the in-toto grate, the shim sealed
+# while the workload runs, the outputs signed and the evidence checked up to
+# the quote after every run (triseal/full-run.sh, e2e/lua-triseal-shm.sh,
+# e2e/sfp/triseal-shm.sh). TRISEAL_SETUPS="preloads shm" adds the setup that
+# reads the inputs from host files and makes no evidence (triseal-sgx,
+# triseal-imfs, e2e/lua-triseal.sh, e2e/sfp/triseal.sh).
 #   3-sfp/              e2e/sfp/run-all.sh: oggenc.c and gcc.c on native,
 #                       TriSeal, Gramine and Occlum, cold vs warm, and what
 #                       each build asks of the host
@@ -34,8 +41,14 @@ export IMFS_GRATE=${IMFS_GRATE:-$HERE/triseal/grates/ev/imfs-grate.cwasm}
 export IPC_GRATE=${IPC_GRATE:-$HERE/triseal/grates/r3/ipc-grate.cwasm}
 export INTOTO_GRATE=${INTOTO_GRATE:-$HERE/triseal/grates/ev/intoto-grate.cwasm}
 export ROOT=${ROOT:-$E/root-na}
+export TRISEAL_SETUPS=${TRISEAL_SETUPS:-shm}
+setup() { [[ " $TRISEAL_SETUPS " == *" $1 "* ]]; }
+TS_MICRO=""; TS_FS=""; TS_BUILD=""
+setup preloads && { TS_MICRO+=" triseal-sgx"; TS_FS+=" triseal-imfs"; TS_BUILD+=" triseal"; }
+setup shm && { TS_MICRO+=" triseal-shm"; TS_FS+=" triseal-shm"; TS_BUILD+=" triseal-shm"; }
 # The Lua build cold vs warm on these systems (e2e/coldwarm.sh SYSTEMS).
-COLDWARM_SYSTEMS=${COLDWARM_SYSTEMS:-native triseal gramine occlum occlum-edmm}
+COLDWARM_SYSTEMS=${COLDWARM_SYSTEMS:-native$TS_BUILD gramine occlum occlum-edmm}
+SFP_SYSTEMS=${SFP_SYSTEMS:-native$TS_BUILD gramine-encrypted gramine-allowed occlum}
 mkdir -p "$R"
 
 sum() { sha256sum "$1" | cut -c1-16; }
@@ -54,6 +67,7 @@ sum() { sha256sum "$1" | cut -c1-16; }
   for g in "$IMFS_GRATE" "$IPC_GRATE" "$INTOTO_GRATE"; do
     echo "grate $g $(stat -c %y "$g") $(sum "$g")"
   done
+  echo "TriSeal setups: $TRISEAL_SETUPS"
   echo "toolchain $ROOT"
   for b in make gcc cc1 as ld; do echo "  $b $(sum "$ROOT/usr/local/bin/$b")"; done
   echo "gramine $(gramine-sgx --version 2>/dev/null || dpkg-query -W gramine 2>/dev/null)"
@@ -68,10 +82,10 @@ step() {
   OUT=$R/$name "$@" >"$R/$name.out" 2>&1
   echo "   rc=$? $(date +%T)" | tee -a "$R/env.txt" >&2
 }
-step 1-microbench "$HERE/run-micro.sh" 100000 20
-step 2-fs-microbench "$HERE/file-compare.sh" native gramine-encrypted triseal-imfs \
+step 1-microbench "$HERE/run-micro.sh" 100000 20 native gramine-direct gramine-sgx $TS_MICRO occlum-sgx
+step 2-fs-microbench "$HERE/file-compare.sh" native gramine-encrypted $TS_FS \
   occlum-ramfs occlum-sefs
-step 3-sfp env N="$N" "$HERE/e2e/sfp/run-all.sh" "$R/3-sfp"
+step 3-sfp env N="$N" SYSTEMS="$SFP_SYSTEMS" "$HERE/e2e/sfp/run-all.sh" "$R/3-sfp"
 step 4-e2e-cold-warm env SYSTEMS="$COLDWARM_SYSTEMS" "$HERE/e2e/coldwarm.sh" "$N"
 step 5-e2e-ecall-ocall "$HERE/e2e/after-start.sh"
 echo "end $(date)" >>"$R/env.txt"
