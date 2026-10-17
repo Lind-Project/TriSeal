@@ -1,14 +1,15 @@
 #!/bin/bash
-# Cold vs warm Lua builds on TriSeal and Gramine (encrypted and plain files),
-# with native builds for reference.
+# Cold vs warm Lua builds on TriSeal, Gramine (encrypted and plain files) and
+# Occlum, with native builds for reference.
 #   cold     one build, from launching the TEE to its exit (lua-*.sh)
 #   first    the first of two builds in one TEE instance (TWICE=1)
 #   warm     the second build in that running instance: TriSeal's module
 #            cache and IMFS are warm; Gramine still starts an enclave per
-#            process
+#            process; Occlum's enclave is already running
 #   startup  launching the TEE and running `make --version` (PROBE=1)
 # Usage: e2e/coldwarm.sh [runs]   -> $OUT/coldwarm.csv and one log per run
-#   SYSTEMS  which of native, triseal, gramine to run (default all three)
+#   SYSTEMS  which of native, triseal, gramine, occlum, occlum-edmm to run
+#            (default native, triseal, gramine)
 #   GTAG     suffix for the Gramine rows, e.g. "-src" when a Gramine built
 #            from source is first on PATH
 set -uo pipefail
@@ -60,6 +61,16 @@ for i in $(seq "$N"); do
       one "$g" "$i" twice MODE=$mode TWICE=1 "$HERE/lua-gramine.sh" "$E/work-cw-gramine"
       one "$g" "$i" startup MODE=$mode PROBE=1 "$HERE/lua-gramine.sh" "$E/work-cw-gramine"
     done
+  fi
+  if has occlum; then
+    one occlum "$i" cold "$HERE/lua-occlum.sh"
+    one occlum "$i" twice TWICE=1 "$HERE/lua-occlum.sh"
+    one occlum "$i" startup PROBE=1 "$HERE/lua-occlum.sh"
+  fi
+  if has occlum-edmm; then
+    one occlum-edmm "$i" cold EDMM=1 "$HERE/lua-occlum.sh"
+    one occlum-edmm "$i" twice EDMM=1 TWICE=1 "$HERE/lua-occlum.sh"
+    one occlum-edmm "$i" startup EDMM=1 PROBE=1 "$HERE/lua-occlum.sh"
   fi
 done
 
