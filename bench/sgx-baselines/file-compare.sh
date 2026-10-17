@@ -10,7 +10,9 @@
 # Build first:
 #   (cd gramine && make APP=microbench && make APP=handoff)
 #   STATIC=1 triseal/build.sh microbench && STATIC=1 triseal/build.sh handoff
-# ENARX / IMFS_GRATE pick TriSeal's runtime and imfs grate. Occlum runs in
+# ENARX / IMFS_GRATE pick TriSeal's runtime and imfs grate; triseal-shm is
+# TriSeal's full setup (triseal/full-run.sh, also INTOTO_GRATE): microbench
+# in an attested bundle, the shim sealed, the evidence checked. Occlum runs in
 # its container, so it gets times but no strace counts.
 #   occlum/run-docker.sh ./build.sh microbench   (ramfs /tmp, SEFS root)
 # Usage: ./file-compare.sh [config...]   -> results/filecmp-<timestamp>/
@@ -20,7 +22,7 @@ LIND=${LIND:-$HOME/lind-wasm}
 ENARX=${ENARX:-$HOME/sgx-bench/e2e/ts/TriSeal36/target/release/enarx}
 IMFS_GRATE=${IMFS_GRATE:-$HERE/triseal/grates/imfs-grate-clock.cwasm}
 BUILD=$HERE/triseal/build
-CONFIGS=${*:-native gramine-tmpfs gramine-allowed gramine-encrypted gramine-trusted triseal-imfs triseal-host occlum-ramfs occlum-sefs}
+CONFIGS=${*:-native gramine-tmpfs gramine-allowed gramine-encrypted gramine-trusted triseal-imfs triseal-shm triseal-host occlum-ramfs occlum-sefs}
 TESTS="file_open_close file_stat file_lseek file_write_64 file_read_64 file_write_4k file_read_4k"
 TIMED=${TIMED:-100000}
 LOW=${LOW:-10000}
@@ -64,6 +66,9 @@ micro() {
     gramine-encrypted) gramine MB_FILE=/enc/mb.dat -- microbench "$1" 1 "${@:2}" ;;
     gramine-trusted)   gramine MB_FILE=/app/trusted.dat MB_NOFILL=1 -- microbench "$1" 1 "${@:2}" ;;
     triseal-imfs)      LIND_GRATE_WORKERS=1 triseal imfs microbench $'MB_FILE = "/tmp/mb.dat"\n' "$1" 1 "${@:2}" ;;
+    triseal-shm)       TRACE="$TRACE" ENVS=$'MB_FILE = "/tmp/mb.dat"\n' IMFS_GRATE="$IMFS_GRATE" \
+                         "$HERE/triseal/full-run.sh" "$OUT/full" "/microbench=$BUILD/microbench.cwasm" -- \
+                         /microbench "$1" 1 "${@:2}" ;;
     triseal-host)      triseal none microbench $'MB_FILE = "/tmp/mb.dat"\n' "$1" 1 "${@:2}" ;;
     occlum-ramfs)      occlum /tmp/mb.dat "$@" ;;
     occlum-sefs)       occlum /root/mb.dat "$@" ;;
@@ -85,6 +90,8 @@ handoff() {
     gramine-allowed)   gramine -- handoff /allowed/handoff.dat ;;
     gramine-encrypted) gramine -- handoff /enc/handoff.dat ;;
     triseal-imfs)      triseal imfs handoff '' /tmp/handoff.dat ;;
+    triseal-shm)       IMFS_GRATE="$IMFS_GRATE" "$HERE/triseal/full-run.sh" "$OUT/full-h" \
+                         "/handoff=$BUILD/handoff.cwasm" -- /handoff /tmp/handoff.dat ;;
     *)                 echo "@handoff n/a" ;;
   esac
 }
