@@ -8,6 +8,9 @@
 # Usage: e2e/sfp/triseal-shm.sh <prog> [workdir]   (prints "wall <s>")
 #   ROOT=<dir>  the staged tree (toolchain and sysroot) to build with
 #   PROBE=1  run `make --version` with the same preloads (startup alone)
+#   TWICE=1  build two copies one after the other in the same keep
+#            (twobuild), "@build <n> <dir> <s> <rc>" for each; both outputs
+#            are signed and dumped
 #   SMALL=1  pack only make, as a one-archive bundle (use with PROBE=1)
 #   NOATTEST=1  leave out --attest
 #   NOINTOTO=1  run the IMFS grate as the main module, without the in-toto
@@ -26,15 +29,20 @@ ENARX=${ENARX:-$E/ze/TriSeal/target/release/enarx}
 INTOTO_GRATE=${INTOTO_GRATE:-$BENCH/triseal/grates/ze/intoto-grate.cwasm}
 IMFS_GRATE=${IMFS_GRATE:-$BENCH/triseal/grates/ze/imfs-grate.cwasm}
 MKPRELOAD=${MKPRELOAD:-$HOME/sgx-bench/grates-attest/tools/mkpreload/target/release/mkpreload}
+TWOBUILD=$BENCH/triseal/build/twobuild.cwasm
 p=$1
 W=${2:-$E/work-sfp-triseal-shm-$p}
 rm -rf "$W" && mkdir -p "$W"
-cp -r "$SFP/tree/$p/." "$W/"
+if [ "${TWICE:-0}" = 1 ]; then
+  cp -r "$SFP/tree/$p" "$W/a"; cp -r "$SFP/tree/$p" "$W/b"; DIRS=("$W/a" "$W/b")
+else
+  cp -r "$SFP/tree/$p/." "$W/"; DIRS=("$W")
+fi
 CC="$BIN/gcc -B$BIN/ -B$L/ -B$G/ -isystem $G/include -isystem $R/usr/include"
 OUTF=$(sfp_out "$p")
 
 headers() {
-  (cd "$W" && gcc -M -nostdinc $SFP_CFLAGS -isystem "$G/include" -isystem "$R/usr/include" "$p.c") |
+  (cd "${DIRS[0]}" && gcc -M -nostdinc $SFP_CFLAGS -isystem "$G/include" -isystem "$R/usr/include" "$p.c") |
     tr -d '\\' | tr ' ' '\n' | grep '^/' | grep -v "^$W/" | sort -u
 }
 pipeline=(
@@ -45,7 +53,9 @@ pipeline=(
   "$R"/lib64/ld-linux-x86-64.so.2
   $(headers)
 )
-sources=("$W/$p.c" "$W/Makefile" "$W/compat/sys/sysctl.h")
+[ "${TWICE:-0}" = 1 ] && pipeline=("$TWOBUILD" "${pipeline[@]}")
+sources=()
+for d in "${DIRS[@]}"; do sources+=("$d/$p.c" "$d/Makefile" "$d/compat/sys/sysctl.h"); done
 
 BUNDLE=/dev/shm/sfp-shm.$$.prld
 DUMP=/dev/shm/sfp-shm.$$.dump
@@ -55,8 +65,13 @@ sections=("${pipeline[@]}" --section "${sources[@]}")
   { tail -3 "$W/mkpreload.log"; exit 1; }
 grep "^mkpreload:" "$W/mkpreload.log" >&2
 
-CMD=("$BIN/make" -C "$W" "CC=$CC" "CFLAGS=$SFP_CFLAGS" "LIBS=$(sfp_libs "$p")")
+ARGS=("CC=$CC" "CFLAGS=$SFP_CFLAGS" "LIBS=$(sfp_libs "$p")")
+CMD=("$BIN/make" -C "$W" "${ARGS[@]}")
 DUMPS="$W/$OUTF=out/$OUTF"
+if [ "${TWICE:-0}" = 1 ]; then
+  CMD=("$TWOBUILD" "$BIN/make" "${DIRS[@]}" -- "${ARGS[@]}")
+  DUMPS="$W/a/$OUTF=out/a/$OUTF;$W/b/$OUTF=out/b/$OUTF"
+fi
 if [ "${PROBE:-0}" = 1 ]; then CMD=("$BIN/make" --version); DUMPS=""; fi
 {
   printf 'args = ['
@@ -79,10 +94,13 @@ end=$(date +%s.%N)
 echo "wall $(echo "$end - $start" | bc) rc=$rc"
 grep -E "error|Error|undefined|imfs-grate:" "$W/build.log" | grep -vE "^\[fork|failed to enable wasm cache" | head -5
 grep "^\[intoto-grate\]" "$W/build.log"
+grep "^@build" "$W/build.log"
 if [ -s "$DUMP" ]; then
   cp "$DUMP" "$W/dump.prld"
   "$MKPRELOAD" unpack "$W/dump.prld" "$W/dump" 2>&1 | tail -1
-  [ -e "$W/dump/out/$OUTF" ] && "$HERE/check.sh" "$p" "$W/dump/out/$OUTF"
+  for o in "$W/dump/out/$OUTF" "$W"/dump/out/*/"$OUTF"; do
+    [ -e "$o" ] && "$HERE/check.sh" "$p" "$o"
+  done
   # The evidence (evidence/, or attest/ from an older recorder) against the
   # bundle and the dumped output.
   if [ -d "$W/dump/evidence" ] || [ -d "$W/dump/attest" ]; then

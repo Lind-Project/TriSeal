@@ -8,8 +8,12 @@
 #            process; Occlum's enclave is already running
 #   startup  launching the TEE and running `make --version` (PROBE=1)
 # Usage: e2e/coldwarm.sh [runs]   -> $OUT/coldwarm.csv and one log per run
-#   SYSTEMS  which of native, triseal, gramine, occlum, occlum-edmm to run
-#            (default native, triseal, gramine)
+#   SYSTEMS  which of native, triseal, triseal-shm, gramine, occlum,
+#            occlum-edmm to run (default native, triseal, gramine);
+#            triseal-shm is TriSeal's full setup (lua-triseal-shm.sh: inputs
+#            in shared memory, attested, outputs signed, evidence checked up
+#            to the quote), whose builds count as ok only with the evidence
+#            verified
 #   GTAG     suffix for the Gramine rows, e.g. "-src" when a Gramine built
 #            from source is first on PATH
 set -uo pipefail
@@ -31,6 +35,7 @@ one() {
   local wall ok
   wall=$(sed -n 's/^wall \([0-9.]*\) rc=.*/\1/p' "$log")
   ok=$(grep -c '^Lua 5.5' "$log")
+  [ "$sys" = triseal-shm ] && ! grep -q '^evidence verified' "$log" && ok=0
   case $kind in
     cold) echo "$sys,$run,cold,$wall,$ok" >>"$CSV" ;;
     startup) echo "$sys,$run,startup,$wall," >>"$CSV" ;;
@@ -53,6 +58,11 @@ for i in $(seq "$N"); do
     one triseal "$i" cold "$HERE/lua-triseal.sh" "$E/work-cw-triseal"
     one triseal "$i" twice TWICE=1 "$HERE/lua-triseal.sh" "$E/work-cw-triseal"
     one triseal "$i" startup PROBE=1 "$HERE/lua-triseal.sh" "$E/work-cw-triseal"
+  fi
+  if has triseal-shm; then
+    one triseal-shm "$i" cold "$HERE/lua-triseal-shm.sh" "$E/work-cw-triseal-shm"
+    one triseal-shm "$i" twice TWICE=1 "$HERE/lua-triseal-shm.sh" "$E/work-cw-triseal-shm"
+    one triseal-shm "$i" startup PROBE=1 "$HERE/lua-triseal-shm.sh" "$E/work-cw-triseal-shm"
   fi
   if has gramine; then
     for mode in encrypted allowed; do

@@ -26,6 +26,11 @@
 # TriSeal runtime with [shm] support (branch triseal-shm-preload).
 # Usage: e2e/lua-triseal-shm.sh [workdir]     (prints "wall <s>" for the keep)
 #   PROBE=1     run `make --version` instead of the build
+#   TWICE=1     build two copies of the tree one after the other in the same
+#               keep (src/twobuild.c), "@build <n> <dir> <s> <rc>" for each:
+#               the first build is cold, the second runs with the module
+#               cache and IMFS already warm; both sets of outputs are signed
+#               and dumped
 #   SMALL=1     pack only make, as a one-archive bundle (use with PROBE=1)
 #   NOATTEST=1  leave out --attest;  NODUMP=1  leave out --dump-shm
 #   ROOT=<dir>  the staged tree (toolchain and sysroot) to build with
@@ -48,12 +53,20 @@ INTOTO_GRATE=${INTOTO_GRATE:-$HERE/triseal/grates/attest/intoto-grate.cwasm}
 # paths (lind-boot outside a keep would chroot into lindfs instead).
 IMFS_GRATE=${IMFS_GRATE:-$HERE/triseal/grates/attest/imfs-grate.cwasm}
 MKPRELOAD=${MKPRELOAD:-$HOME/sgx-bench/grates-attest/tools/mkpreload/target/release/mkpreload}
+TWOBUILD=$HERE/triseal/build/twobuild.cwasm
 W=${1:-$E/work-lua-shm}
 
 rm -rf "$W"
 mkdir -p "$W"
-cp -r "$E/lua-5.5.1-src/." "$W/"
-SRC=$W/src
+if [ "${TWICE:-0}" = 1 ]; then
+  cp -r "$E/lua-5.5.1-src" "$W/a"
+  cp -r "$E/lua-5.5.1-src" "$W/b"
+  SRCS=("$W/a/src" "$W/b/src")
+else
+  cp -r "$E/lua-5.5.1-src/." "$W/"
+  SRCS=("$W/src")
+fi
+SRC=${SRCS[0]}
 CC="$BIN/gcc -std=gnu99 -B$BIN/ -B$L/ -B$G/ -isystem $G/include -isystem $R/usr/include"
 
 # Headers the build reads, from the host compiler with the same search path.
@@ -70,7 +83,11 @@ pipeline=(
   "$R"/lib64/ld-linux-x86-64.so.2
   $(headers)
 )
-sources=("$SRC"/*.c "$SRC"/*.h "$SRC"/Makefile)
+[ "${TWICE:-0}" = 1 ] && pipeline=("$TWOBUILD" "${pipeline[@]}")
+sources=()
+for d in "${SRCS[@]}"; do
+  sources+=("$d"/*.c "$d"/*.h "$d"/Makefile)
+done
 sections=("${pipeline[@]}" --section "${sources[@]}")
 if [ "${SMALL:-0}" = 1 ]; then
   sections=("$BIN/make")
@@ -89,11 +106,19 @@ fi
 
 MAKE_ARGS=(all SYSCFLAGS=-DLUA_USE_POSIX "CC=$CC" "AR=$BIN/ar rcu" "RANLIB=$BIN/ranlib")
 CMD=("$BIN/make" -C "$SRC" "${MAKE_ARGS[@]}")
+[ "${TWICE:-0}" = 1 ] && CMD=("$TWOBUILD" "$BIN/make" "${SRCS[@]}" -- "${MAKE_ARGS[@]}")
 [ "${PROBE:-0}" = 1 ] && CMD=("$BIN/make" --version)
 FLAGS=(--preload-shm)
 [ "${NOATTEST:-0}" = 1 ] || [ "${NOINTOTO:-0}" = 1 ] || FLAGS+=(--attest)
 [ "${NODUMP:-0}" = 1 ] || FLAGS+=(--dump-shm)
-DUMPS="$SRC/lua=out/lua;$SRC/luac=out/luac"
+# DUMPS: IMFS path = path in the dump archive (out/, or out/a/ and out/b/).
+DUMPS=""
+for d in "${SRCS[@]}"; do
+  o=out
+  [ "${TWICE:-0}" = 1 ] && o=out/$(basename "$(dirname "$d")")
+  DUMPS+="$d/lua=$o/lua;$d/luac=$o/luac;"
+done
+DUMPS=${DUMPS%;}
 [ "${PROBE:-0}" = 1 ] && DUMPS=""
 
 {
@@ -115,13 +140,15 @@ echo "wall $(echo "$end - $start" | bc) rc=$rc"
 
 grep -E "error|Error|undefined|imfs-grate:" "$W/build.log" | grep -vE "^\[fork|failed to enable wasm cache" | head -5
 grep "^\[intoto-grate\]" "$W/build.log"
+grep "^@build" "$W/build.log"
 if [ -s "$DUMP" ]; then
   cp "$DUMP" "$W/dump.prld"
   "$MKPRELOAD" unpack "$W/dump.prld" "$W/dump" 2>&1 | tail -1
-  if [ -x "$W/dump/out/lua" ]; then
-    echo "lua: $(file -b "$W/dump/out/lua" | cut -c1-60)"
-    "$W/dump/out/lua" -e 'print(_VERSION, 2^10, string.format("%q", "ok"))'
-  fi
+  for lua in "$W"/dump/out/lua "$W"/dump/out/*/lua; do
+    [ -x "$lua" ] || continue
+    echo "lua: $(file -b "$lua" | cut -c1-60)"
+    "$lua" -e 'print(_VERSION, 2^10, string.format("%q", "ok"))'
+  done
   # The evidence (evidence/, or attest/ from an older recorder) against the
   # bundle and the dumped outputs.
   if [ -d "$W/dump/evidence" ] || [ -d "$W/dump/attest" ]; then

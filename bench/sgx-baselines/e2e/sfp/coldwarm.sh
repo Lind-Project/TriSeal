@@ -7,8 +7,9 @@
 #   first    the first of two builds in one TEE instance (TWICE=1)
 #   warm     the second one (module cache and IMFS warm on TriSeal)
 # Occlum has no fork, so no twobuild there: cold and startup only.
-# triseal-shm (triseal-shm.sh: preloads from shared memory, attested, output
-# dumped to shared memory) has no twobuild either: cold and startup.
+# triseal-shm (triseal-shm.sh: TriSeal's full setup, preloads from shared
+# memory, attested, output signed and dumped to shared memory) counts a build
+# as ok only with its evidence verified.
 # Usage: e2e/sfp/coldwarm.sh            (OUT=<dir>, N=<runs>,
 #        N_gcc=<runs for gcc.c>, SYSTEMS="native triseal ...")
 set -uo pipefail
@@ -34,6 +35,7 @@ one() {
   local wall ok
   wall=$(sed -n 's/^wall \([0-9.]*\).*/\1/p' "$f" | tail -1)
   ok=$(grep -c ": ok" "$f")
+  [ "$sys" = triseal-shm ] && ! grep -q '^evidence verified' "$f" && ok=0
   case $kind in
     twice)
       echo "$sys,$p,$i,twice-total,$wall,$ok" >>"$CSV"
@@ -60,7 +62,8 @@ for p in "${SFP_PROGS[@]}"; do
           one triseal "$p" "$i" twice env TWICE=1 "$HERE/triseal.sh" "$p" "$E/work-sfp-triseal" ;;
         triseal-shm)
           one triseal-shm "$p" "$i" cold "$HERE/triseal-shm.sh" "$p" "$E/work-sfp-triseal-shm"
-          one triseal-shm "$p" "$i" startup env PROBE=1 "$HERE/triseal-shm.sh" "$p" "$E/work-sfp-triseal-shm" ;;
+          one triseal-shm "$p" "$i" startup env PROBE=1 "$HERE/triseal-shm.sh" "$p" "$E/work-sfp-triseal-shm"
+          one triseal-shm "$p" "$i" twice env TWICE=1 "$HERE/triseal-shm.sh" "$p" "$E/work-sfp-triseal-shm" ;;
         gramine-*)
           m=${sys#gramine-}
           one "$sys" "$p" "$i" cold env MODE="$m" ENCLAVE_SIZE="$(genclave "$p")" "$HERE/gramine.sh" "$p" "$E/work-sfp-gramine"
