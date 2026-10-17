@@ -83,7 +83,11 @@ if [ -s "$DUMP" ]; then
   cp "$DUMP" "$W/dump.prld"
   "$MKPRELOAD" unpack "$W/dump.prld" "$W/dump" 2>&1 | tail -1
   [ -e "$W/dump/out/$OUTF" ] && "$HERE/check.sh" "$p" "$W/dump/out/$OUTF"
-  [ -d "$W/dump/attest" ] && python3 "$BENCH/e2e/verify-attest.py" "$W/dump/attest" "$BUNDLE"
+  # The evidence (evidence/, or attest/ from an older recorder) against the
+  # bundle and the dumped output.
+  if [ -d "$W/dump/evidence" ] || [ -d "$W/dump/attest" ]; then
+    python3 "$BENCH/e2e/verify-attest.py" "$W/dump" "$BUNDLE"
+  fi
 fi
 rm -f "$BUNDLE" "$DUMP"
 exit $rc

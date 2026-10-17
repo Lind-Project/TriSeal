@@ -11,6 +11,7 @@
 #                       TriSeal, Gramine and Occlum, cold vs warm, and what
 #                       each build asks of the host
 #   4-e2e-cold-warm/    e2e/coldwarm.sh: Lua build, cold vs warm start
+#                       (native, TriSeal, Gramine, Occlum SGX1 and EDMM)
 #   5-e2e-ecall-ocall/  e2e/after-start.sh: enclave transitions from the
 #                       start of the Lua build to its end
 # Usage: ./rerun-all.sh [e2e runs]   -> results/rerun-<timestamp>/
@@ -19,16 +20,22 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 N=${1:-3}
 R=${R:-$HERE/results/rerun-$(date +%Y%m%d-%H%M%S)}
 E=${E:-$HOME/sgx-bench/e2e}
-# TriSeal open-futex (stats built in, ENARX_SGX_STATS) on lind-wasm
-# enarx-7-13 (e2e/r3). Grates: IMFS and IPC keeping their cage id, IMFS
-# reserving its chunk arena before staging; in-toto as before. Toolchain:
-# cc1, as and ld without Asyncify (e2e/root-na).
-export ENARX=${ENARX:-$E/r3/TriSeal/target/release/enarx}
+# TriSeal triseal-t2-t7-t3 (open-futex a442cc90 + the shim sealed once the
+# build starts + a compiled-in module allowlist + the evidence chain anchored
+# to the quote; stats built in, ENARX_SGX_STATS) on lind-wasm lw-ev
+# (enarx-7-13 + module admission + LIND_EVIDENCE), built with the
+# evaluation's allowlist plus the benchmark programs (e2e/s73b). Grates: IMFS
+# and in-toto signing the outputs and handing over the evidence (ev); IPC
+# keeping its cage id (r3). Toolchain: cc1, as and ld without Asyncify
+# (e2e/root-na).
+export ENARX=${ENARX:-$E/s73b/TriSeal/target/release/enarx}
 export ENARX_STATS=${ENARX_STATS:-$ENARX}
-export IMFS_GRATE=${IMFS_GRATE:-$HERE/triseal/grates/r3/imfs-grate.cwasm}
+export IMFS_GRATE=${IMFS_GRATE:-$HERE/triseal/grates/ev/imfs-grate.cwasm}
 export IPC_GRATE=${IPC_GRATE:-$HERE/triseal/grates/r3/ipc-grate.cwasm}
-export INTOTO_GRATE=${INTOTO_GRATE:-$HERE/triseal/grates/r3/intoto-grate.cwasm}
+export INTOTO_GRATE=${INTOTO_GRATE:-$HERE/triseal/grates/ev/intoto-grate.cwasm}
 export ROOT=${ROOT:-$E/root-na}
+# The Lua build cold vs warm on these systems (e2e/coldwarm.sh SYSTEMS).
+COLDWARM_SYSTEMS=${COLDWARM_SYSTEMS:-native triseal gramine occlum occlum-edmm}
 mkdir -p "$R"
 
 sum() { sha256sum "$1" | cut -c1-16; }
@@ -42,7 +49,8 @@ sum() { sha256sum "$1" | cut -c1-16; }
   echo "enarx (stats) $ENARX_STATS"
   t=$(dirname "$(dirname "$(dirname "$ENARX")")")
   echo "TriSeal source $(cat "$t/SOURCE_COMMIT" 2>/dev/null)"
-  echo "lind-wasm $(readlink -f "$t/lind-wasm")"
+  echo "lind-wasm $(readlink -f "$t/../lind-wasm")"
+  [ -f "$t/../allowlist.txt" ] && echo "module allowlist $(readlink -f "$t/../allowlist.txt") $(sum "$t/../allowlist.txt")"
   for g in "$IMFS_GRATE" "$IPC_GRATE" "$INTOTO_GRATE"; do
     echo "grate $g $(stat -c %y "$g") $(sum "$g")"
   done
@@ -64,7 +72,7 @@ step 1-microbench "$HERE/run-micro.sh" 100000 20
 step 2-fs-microbench "$HERE/file-compare.sh" native gramine-encrypted triseal-imfs \
   occlum-ramfs occlum-sefs
 step 3-sfp env N="$N" "$HERE/e2e/sfp/run-all.sh" "$R/3-sfp"
-step 4-e2e-cold-warm "$HERE/e2e/coldwarm.sh" "$N"
+step 4-e2e-cold-warm env SYSTEMS="$COLDWARM_SYSTEMS" "$HERE/e2e/coldwarm.sh" "$N"
 step 5-e2e-ecall-ocall "$HERE/e2e/after-start.sh"
 echo "end $(date)" >>"$R/env.txt"
 echo "results: $R"
