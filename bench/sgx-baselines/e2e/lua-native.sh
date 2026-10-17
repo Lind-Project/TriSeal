@@ -16,6 +16,9 @@ rm -rf "$W"
 mkdir -p "$W"
 CC="$NG/gcc -std=gnu99 -B$NG/ -B$L/ -B$G/ -isystem $G/include -isystem $R/usr/include"
 MAKE_ARGS=(all SYSCFLAGS=-DLUA_USE_POSIX "CC=$CC" "AR=/usr/bin/ar rcu" RANLIB=/usr/bin/ranlib)
+# JOBS=<n>: make -j<n>; JOBSTYLE=fifo|pipe: make's --jobserver-style.
+[ -n "${JOBSTYLE:-}" ] && MAKE_ARGS=("--jobserver-style=$JOBSTYLE" "${MAKE_ARGS[@]}")
+[ -n "${JOBS:-}" ] && MAKE_ARGS=("-j$JOBS" "${MAKE_ARGS[@]}")
 if [ "${TWICE:-0}" = 1 ]; then
   cp -r "$E/lua-5.5.1-src" "$W/a"
   cp -r "$E/lua-5.5.1-src" "$W/b"
