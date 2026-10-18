@@ -283,6 +283,11 @@ pub struct Tcb {
     /// Set by an `exit_group()` taken through the direct syscall entry: the
     /// thread returns to the shim's thread loop, which then leaves the enclave.
     pub exit_group: Option<i32>,
+    /// Set while the shim makes one of the few requests to the host that a
+    /// sealed keep still makes for this thread (see `handler::SEALED`). In
+    /// the TCB, not the handler, because a syscall taken through the direct
+    /// entry reaches the host from a second handler, entered for `SYS_SALLY`.
+    pub host_permit: bool,
     /// The thread ID
     pub tid: pid_t,
     /// Holds addresses of AtomicU32 to clear on exiting the thread

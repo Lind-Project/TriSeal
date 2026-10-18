@@ -14,9 +14,13 @@ dbg = ["rustls/logging"]
 [dependencies]
 anyhow = { workspace = true }
 cap-std = { workspace = true }
+chrono = { workspace = true }
 const-oid = { workspace = true }
+data-encoding = { workspace = true }
 enarx-config = { workspace = true }
 getrandom = { workspace = true }
+hex = { workspace = true }
+in-toto = { workspace = true }
 io-lifetimes = { workspace = true }
 libc = { workspace = true }
 once_cell = { workspace = true }
@@ -26,6 +30,7 @@ rustix = { workspace = true }
 rustls = { workspace = true }
 sec1 = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 sha2 = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true, features = ["release_max_level_info", "std"] }

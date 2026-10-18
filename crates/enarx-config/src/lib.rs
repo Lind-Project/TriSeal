@@ -8,7 +8,7 @@
 #![deny(clippy::all)]
 #![warn(rust_2018_idioms)]
 
-use std::{collections::HashMap, ops::Deref};
+use std::{collections::HashMap, ops::Deref, path::PathBuf};
 
 use serde::{de::Error as _, Deserialize, Deserializer, Serialize};
 use url::Url;
@@ -29,6 +29,12 @@ pub const CONFIG_TEMPLATE: &str = r#"## Configuration for a WASI application in 
 # [env]
 # VAR1 = "var1"
 # VAR2 = "var2"
+
+## in-toto attestation of the run (written to stderr when `dir` is unset)
+# [intoto]
+# dir = "/var/lib/enarx/attestations"
+# stderr = false
+# disabled = false
 
 ## Pre-opened file descriptors
 [[files]]
@@ -155,6 +161,10 @@ pub struct Config {
     /// Shared-memory preload and dump regions for lind
     #[serde(default)]
     pub shm: Option<Shm>,
+
+    /// in-toto attestation of the workload run
+    #[serde(default)]
+    pub intoto: InToto,
 }
 
 /// Host files mapped outside the keep before lind starts, for a grate to
@@ -197,8 +207,34 @@ impl Default for Config {
             files,
             steward: None, // TODO: Default to a deployed Steward instance
             shm: None,
+            intoto: InToto::default(),
         }
     }
+}
+
+/// in-toto attestation of the workload run
+///
+/// Two DSSE-wrapped in-toto statements are produced per run, signed with the keep
+/// identity key: `run-start` right before the lind-wasm runtime starts and `run-end`
+/// right after it ends.
+///
+/// See the [crate] documentation for the file layout.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InToto {
+    /// Do not produce attestations
+    #[serde(default)]
+    pub disabled: bool,
+
+    /// Directory the attestations are written to
+    ///
+    /// The path is resolved by the host. When unset, attestations are printed to stderr.
+    #[serde(default)]
+    pub dir: Option<PathBuf>,
+
+    /// Also print the attestations to stderr when `dir` is set
+    #[serde(default)]
+    pub stderr: bool,
 }
 
 /// `/dev/null` file descriptor
