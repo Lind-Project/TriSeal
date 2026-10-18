@@ -137,9 +137,11 @@ const PHASE_AT_EXIT: usize = 16;
 /// build step that got an error could take another path, one the host chose.
 static SEALED: AtomicBool = AtomicBool::new(false);
 
-/// What the keep exits with when it is sealed and asked for something else
-/// (128 + SIGSYS, as for a process that seccomp kills).
-const SEALED_EXIT: c_int = 128 + 31;
+/// What the keep exits with when it ends the run rather than let the payload
+/// see an error: when it is sealed and asked for something else, when the
+/// host does not start a thread the payload asked for, or when the host
+/// breaks a rule (128 + SIGSYS, as for a process that seccomp kills).
+const FAIL_STOP_EXIT: c_int = 128 + 31;
 
 /// The host file mapped writable with `SYS_MAPSHM` (the dump), or -1.
 static DUMP_FD: AtomicI32 = AtomicI32::new(-1);
@@ -421,6 +423,17 @@ impl<'a> Write for Handler<'a> {
 }
 
 impl guest::Handler for Handler<'_> {
+    /// The host broke a rule, or the shim's state is not what it relies on:
+    /// end the run as a refusal does. (sallyport's `attacked()` loops on
+    /// `exit_group()`, which never ends a thread that came in through the
+    /// direct entry: there it only arranges the return to the thread loop,
+    /// so the keep would spin forever.)
+    #[track_caller]
+    fn attacked(&mut self) -> ! {
+        let at = core::panic::Location::caller();
+        self.fail_stop(format_args!("attacked ({}:{})", at.file(), at.line()))
+    }
+
     fn sally(&mut self) -> sallyport::Result<()> {
         // Every request reaches the host through here. Once the keep is
         // sealed, only those the thread has a permit for do: whatever path
@@ -579,11 +592,21 @@ impl guest::Handler for Handler<'_> {
             return Ok(new_tid);
         }
 
+        // If no thread can be had, the run ends rather than the clone()
+        // fails: a build step that saw EAGAIN could take another path (make
+        // running fewer jobs, a program falling back to one thread), one the
+        // host would have chosen by refusing the thread.
         let mut threads_free_guard = THREADS_FREE.write();
 
         let addr = if *threads_free_guard == 0 {
             debugln!(self, "[{tid}] allocating new thread");
-            self.permit(|h| h.thread_mem_alloc()).map_err(|_| EAGAIN)? as usize
+            match self.permit(|h| h.thread_mem_alloc()) {
+                Ok(tcs) => tcs as usize,
+                Err(e) => {
+                    drop(threads_free_guard);
+                    self.fail_stop(format_args!("no memory for a new thread (error {e})"))
+                }
+            }
         } else {
             *threads_free_guard -= 1;
             0
@@ -597,7 +620,9 @@ impl guest::Handler for Handler<'_> {
 
         let ret = self.permit(|h| h.spawn(addr));
         debugln!(self, "[{tid}] spawn() = {ret:#?}");
-        ret?;
+        if let Err(e) = ret {
+            self.fail_stop(format_args!("the host did not start a thread (error {e})"));
+        }
 
         Ok(new_tid)
     }
@@ -1321,16 +1346,19 @@ impl<'a> Handler<'a> {
     }
 
     /// End the run: the sealed keep was asked for `what` (`a`, `b`), which
-    /// it does not serve. Say so on the console, then ask the host to exit
-    /// the process, the one thing still allowed. Never returns, so nothing
-    /// of the request goes further, and the payload never sees an error.
+    /// it does not serve (see [`Self::fail_stop`]).
     fn sealed_refuse(&mut self, what: &str, a: u64, b: u64) -> ! {
+        self.fail_stop(format_args!("sealed keep: refused {what} {a} ({b:#x})"))
+    }
+
+    /// End the whole run, because of `why`. Say so on the console, then ask
+    /// the host to exit the process, the one thing a sealed keep still
+    /// allows. Never returns, so nothing of the request that led here goes
+    /// further, and the payload never sees an error.
+    fn fail_stop(&mut self, why: core::fmt::Arguments<'_>) -> ! {
         self.tcb.host_permit = true;
         let mut line = Line::new();
-        let _ = writeln!(
-            line,
-            "[shim] sealed keep: refused {what} {a} ({b:#x}), exiting"
-        );
+        let _ = writeln!(line, "[shim] {why}, exiting");
         // Unless this thread holds the console lock: then it says nothing.
         if let Some(mut console) = CONSOLE.try_lock() {
             let kept = console.push(STDERR_FILENO as u8, line.as_bytes());
@@ -1347,7 +1375,7 @@ impl<'a> Handler<'a> {
         store_counters(PHASE_AT_EXIT);
         loop {
             let _ = self.execute(sys::ExitGroup {
-                status: SEALED_EXIT,
+                status: FAIL_STOP_EXIT,
             });
         }
     }
