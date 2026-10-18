@@ -2,32 +2,39 @@
 # module file, then a name for people). build.rs compiles them into
 # enarx-exec-wasmtime, so they are part of the keep's measurement; a module
 # whose SHA-256 is not here ends the run. Build with ENARX_CWASM_ALLOWLIST=<file>
-# to use another list. lind-boot --precompile reproduces each .cwasm from its
-# .wasm byte for byte, so every entry can be audited.
+# to use another list. `lind-boot --precompile --explicit-bounds-checks`
+# reproduces each .cwasm from its .wasm byte for byte, so every entry can be
+# audited.
 #
-# Built on lind-server-3 (~/sgx-bench), 2026-10-17.
+# Every module is compiled with explicit bounds checks and no guard regions
+# (the shim maps every page readable, so a guard region would not stop an
+# access out of bounds); the engine in the keep refuses a module compiled
+# otherwise. Precompiled on lind-server-3 (~/sgx-bench), 2026-10-17, with the
+# lind-boot of lind-wasm explicit-bounds-checks (enarx-7-13 52bbb8798 + the
+# --explicit-bounds-checks option); without the option the same lind-boot
+# reproduces the previous list from the same .wasm files.
 #
 # Grates: lind-wasm-example-grates main b9ae5df, `cargo-lind_compile --release`
 # in grates-main/rust-grates/<grate> (the .wasm also depends on the directory
-# it is built in), precompiled with the lind-boot of lind-wasm enarx-7-13
-# 82784940c.
-97d903867f69a9146f15d40559fb30e1868b12dfbc911b82395c91585b078e85  imfs-grate.cwasm
-c614ed46cdab77686eafc7c6b9c6efe9c907ab1cf22b7157bb5eff1f2fb61f85  intoto-grate.cwasm
-9cbe6c8da7a42b6b64b2bc3f09551c0839ba813d0532f241fa620f219cb35635  ipc-grate.cwasm
-# The build toolchain (e2e/root-na/usr/local/bin; cc1, as and ld without
-# asyncify) and the in-toto CLI.
-082641c60c088cd2587ee8adecd6aafbaaeb47f660f775ad077702dc7353bad6  make
-248e2d59ef999f62ab12d13f37b7d37450ab38c662ff30dc21167ffd3e040c13  gcc
-a94c67f88bd5d783dac62940d31ce54c205e5a71f348bf324d3aa6a02a61c759  cc1
-7a8f4f76e18b367c567e335ae615980114504acad8d6090f166767711552550e  as
-2bca9362da63a3158b2a0de084fb625cc2b1e2eaa9980b2ae176c9449b0c2ee6  ld
-5261920f060c7fe0f28ab89e838887e073544fd6a9b70482780a584351e5e344  ar
-3e8877d814a3b52ac5ac63991f1a448f5e012056e59472247ab126d65861d8c3  ranlib
-33d976ddc3389184b644f77502571d332b99929298f626ebecd39f6878c8990c  in-toto-cli.cwasm
+# it is built in).
+7d380e6992d96d7fc106dd04272970e9203d827b7a2bfcc5696e581653ebeb31  imfs-grate.cwasm
+9c1b9e8cb5f05beb170ccbe67c9c479eb65f2f6612e1eadaa557445e48e7d8cd  intoto-grate.cwasm
+58e064f07f1bd0b3bf90a40dc1cb701bc75d150d8c26f8f4ce366460d5330ea3  ipc-grate.cwasm
+# The build toolchain (e2e/root-ebc/usr/local/bin: make, gcc, ar and ranlib
+# from e2e/wasm/*.opt.wasm, cc1, as and ld without asyncify from
+# e2e/noasync/*.noasync.wasm) and the in-toto CLI.
+9e06e46bf12ed676be443f537b9d68f32d55f3220a966638d3e6eaeea9e6be07  make
+ccc5342023d4284a8c0d6c4e17fe8ffa60c4fa5c8232202c9e7a3a93265687ee  gcc
+4c0c771adb70c52a1d5018a6a38b5afce3bf0657c5dea9bba0f7e1045acf1ffb  cc1
+ebf5df711fdbb07c3d11e9b105e79f34dde117ecbebe675cb000dc778dec83d8  as
+0277778255fe808fa6e1841d07fdf723427fa9ef96632f390bc84b235fe6c290  ld
+cd4f3a271d8416216ebf9c6cc92fc0f8813fa4b309817caa547a80287136d8fe  ar
+cfbec9973b517b5c31478cb87b87e78356ebba1eb7216eaa4e6885c46921fa43  ranlib
+a4ff0f421aaff59df68003134bc013f438806fb871de92021959041f36bd917e  in-toto-cli.cwasm
 # Programs the evaluation scripts run (triseal/build): two builds in one keep,
 # and the microbenchmarks with the programs they exec.
-67070540066dc270512485f070be9b5dcafcff46288c8d5b06b797ed6e8f462c  twobuild.cwasm
-e7d0220f83816a203bd776ae4816db94c0a31783be5e0ebec8b940f060210407  microbench.cwasm
-672724f484a7dacfd6e8bd7028d7017839be4f3099d1cff712b79bb68c1792f4  hello.cwasm
-c4a59a374315b87da880ee4b1c0ec046d8c4008e44d3d2ac00a8f8c61d5a493d  nop.cwasm
-f590819e1078daae791d58d7d4afc8b7fd44b5913f4d527fa54d317e2f462200  handoff.cwasm
+bb9f8c7aa6a659eb0235733ce0eef67c30fe6ce9c685f0ecf4a5907d32ab2b00  twobuild.cwasm
+5e3ba580474dbd0ac80f9e813bce9c1a3290cda33a4c0ea6a3241a41254ab9ef  microbench.cwasm
+029e429079351044a355a64261855b7f588c9948d4b93c91330024ecb0ccf135  hello.cwasm
+8c8ebd7056e3c8ec41cb13debc3b414a8b15f3d009c48d81a9bab26ec32c9c08  nop.cwasm
+b6cfe664241678c891f27105b73b9e44690323beb06bff3debf1c565b4d0fccd  handoff.cwasm

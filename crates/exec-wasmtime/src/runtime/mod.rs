@@ -76,6 +76,10 @@ impl Runtime {
             precompile: false,
             wasmtime_backtrace: false,
             enable_fpcast: false,
+            // The shim maps every page readable, so memory safety must not
+            // rest on guard regions: the allowlisted modules are compiled
+            // with explicit bounds checks, and the engine refuses others.
+            explicit_bounds_checks: true,
             wasm_bytes: Some(workload.webasm.clone()),
 
             // args[0] is still guest argv[0], even though module bytes come from wasm_bytes.

@@ -1866,6 +1866,17 @@ impl<'a> Handler<'a> {
             }
         }
 
+        // Nothing changes if one record already gives the region this
+        // access. mmledger 0.4 would even fail on such a region when it ends
+        // where the record ends and another record follows, as wasmtime asks
+        // for when it grows a linear memory that has no guard region after
+        // it to its whole reservation.
+        if let Some((record, current)) = heap.record_at(addr) {
+            if addr + length <= record.end && current & !Access::MMAPPED == access {
+                return Ok(());
+            }
+        }
+
         // Committed pages are RWX in the EPCM and on the host, so a change of
         // protection is recorded in the ledger only.
         heap.protect_with(addr, length, |record| {
