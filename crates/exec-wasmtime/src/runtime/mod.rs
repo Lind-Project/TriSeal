@@ -4,6 +4,7 @@
 
 mod admission;
 mod attest;
+mod clock;
 mod identity;
 mod io;
 mod shm;
@@ -32,6 +33,11 @@ impl Runtime {
     pub fn execute(package: Package) -> anyhow::Result<Vec<Val>> {
         let workload: Workload = package.try_into()?;
         let config = workload.config.clone().unwrap_or_default();
+
+        // From here on the real-time clock reads the declared date: the
+        // certificates, run-start and the whole build see it, never the
+        // host's.
+        clock::declare(config.clock.epoch).context("failed to declare the [clock] epoch")?;
 
         let (prvkey, crtreq, report) =
             identity::generate().context("failed to generate a private key and CSR")?;
@@ -106,6 +112,7 @@ impl Runtime {
                     argv: &options.args,
                     env: &config.env,
                     preloads: &options.preloads,
+                    clock_epoch: config.clock.epoch,
                 })
                 .context("failed to emit in-toto run-start attestation")?;
 

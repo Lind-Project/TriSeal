@@ -59,8 +59,8 @@ With `dir` set, every run `<id>` writes three files there:
 
 * `lind-wasm-run-start.<id>.intoto.json`: subject `main.wasm` (sha256/sha512 of the module),
   predicate `https://lind-project.org/attestation/lind-wasm/run-start/v1` with the guest
-  argv/env/preloads, the TEE technology, the keep identity key and certificate digests, and
-  the signer.
+  argv/env/preloads and clock epoch, the TEE technology, the keep identity key and
+  certificate digests, and the signer.
 * `lind-wasm-run-end.<id>.intoto.json`: same subject, predicate
   `https://lind-project.org/attestation/lind-wasm/run-end/v1` with the exit code or runtime
   error, the duration, and the sha256 of the `run-start` file.
@@ -78,6 +78,22 @@ nothing out but its console and dump region.
 ```toml
 [intoto]
 dir = "/var/lib/enarx/attestations"
+```
+
+### `clock`
+
+`clock` declares the date the run sees. An SGX keep never asks the host for the time of
+day: the real-time clock reads `epoch` (seconds since 1970-01-01T00:00:00Z, default 0)
+when the workload starts and advances from there with the TSC, and the monotonic clock
+(also standing in for the CPU-time clocks) starts at 0 when the keep starts. Neither ever
+reads less than it did before, even if the host moves the TSC. `run-start` records the
+epoch under `invocation.clock`, with the other inputs of the run.
+
+#### Example
+
+```toml
+[clock]
+epoch = 1760659200
 ```
 
 ### `files`

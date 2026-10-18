@@ -47,6 +47,13 @@ pub const SYS_SALLY: i64 = 0xEA06;
 #[allow(dead_code)]
 pub const SYS_PHASE: i64 = 0xEA07;
 
+/// `clock_epoch(ns)` syscall number used by the shim: declare that the
+/// real-time clock reads `ns` nanoseconds since the Unix epoch now. The
+/// workload may do this once, before the build starts; the shim never asks
+/// the host for the time of day.
+#[allow(dead_code)]
+pub const SYS_CLOCK_EPOCH: i64 = 0xEA08;
+
 /// Upper half of the value the shim leaves the enclave with (in `r8`, by
 /// EEXIT at CSSA 0) after an `exit_group()` taken through its direct syscall
 /// entry, the lower half being the status: the host then exits the process,
