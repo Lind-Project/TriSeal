@@ -51,8 +51,15 @@ measurement. Any other module, whether it is the workload, a grate or a tool
 a build execs, ends the run with status 126. To run other modules, list them
 (`sha256sum *.cwasm` output) in a file and build with
 `ENARX_CWASM_ALLOWLIST=<file>`; the keep then has another measurement.
-`lind-boot --precompile` reproduces a `.cwasm` from its `.wasm` byte for byte,
-so anyone can check what an entry is.
+`lind-boot --precompile --explicit-bounds-checks` reproduces a `.cwasm` from
+its `.wasm` byte for byte, so anyone can check what an entry is.
+
+The modules must be compiled with `--explicit-bounds-checks`: the SGX shim
+maps every page at least readable, so a guard region would not stop an access
+that is out of bounds. With that option every linear-memory access is checked
+in the generated code, memories have no guard regions, and nothing relies on a
+fault. The engine in the keep is configured the same way and refuses a
+`.cwasm` compiled otherwise.
 
 
 License: Apache-2.0

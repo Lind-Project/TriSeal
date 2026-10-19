@@ -57,8 +57,8 @@ use sallyport::guest::syscall::ClockGettime;
 use sallyport::guest::{self, syscall as sys, Handler as _, Platform, ThreadLocalStorage};
 use sallyport::item::enarxcall::sgx::{Report, ReportData, TargetInfo, TECH};
 use sallyport::item::enarxcall::{
-    shared, SYS_COMMITSHM, SYS_DIRECT_INIT, SYS_GETATT, SYS_GETKEY, SYS_MAPSHM, SYS_PHASE,
-    SYS_SALLY,
+    shared, SYS_CLOCK_EPOCH, SYS_COMMITSHM, SYS_DIRECT_INIT, SYS_GETATT, SYS_GETKEY, SYS_MAPSHM,
+    SYS_PHASE, SYS_SALLY,
 };
 use sallyport::libc::{
     clockid_t, off_t, pid_t, timespec, CloneFlags, SYS_brk, SYS_clock_gettime, SYS_clone, SYS_exit,
@@ -66,7 +66,7 @@ use sallyport::libc::{
     SYS_getpid, SYS_getrandom, SYS_getuid, SYS_ioctl, SYS_madvise, SYS_mmap, SYS_mprotect,
     SYS_mremap, SYS_munmap, SYS_rt_sigprocmask, SYS_sched_yield, SYS_set_tid_address,
     SYS_sigaltstack, SYS_write, SYS_writev, CLOCK_MONOTONIC, EACCES, EAGAIN, EINTR, EINVAL, EIO,
-    EMSGSIZE, ENOMEM, ENOSYS, ENOTSUP, FUTEX_BITSET_MATCH_ANY, FUTEX_CLOCK_REALTIME,
+    EMSGSIZE, ENOMEM, ENOSYS, ENOTSUP, EPERM, FUTEX_BITSET_MATCH_ANY, FUTEX_CLOCK_REALTIME,
     FUTEX_PRIVATE_FLAG, FUTEX_WAIT, FUTEX_WAIT_BITSET, FUTEX_WAKE, FUTEX_WAKE_BITSET,
     MAP_ANONYMOUS, MAP_PRIVATE, PROT_EXEC, PROT_READ, PROT_WRITE, STDERR_FILENO, STDOUT_FILENO,
 };
@@ -137,9 +137,11 @@ const PHASE_AT_EXIT: usize = 16;
 /// build step that got an error could take another path, one the host chose.
 static SEALED: AtomicBool = AtomicBool::new(false);
 
-/// What the keep exits with when it is sealed and asked for something else
-/// (128 + SIGSYS, as for a process that seccomp kills).
-const SEALED_EXIT: c_int = 128 + 31;
+/// What the keep exits with when it ends the run rather than let the payload
+/// see an error: when it is sealed and asked for something else, when the
+/// host does not start a thread the payload asked for, or when the host
+/// breaks a rule (128 + SIGSYS, as for a process that seccomp kills).
+const FAIL_STOP_EXIT: c_int = 128 + 31;
 
 /// The host file mapped writable with `SYS_MAPSHM` (the dump), or -1.
 static DUMP_FD: AtomicI32 = AtomicI32::new(-1);
@@ -421,6 +423,17 @@ impl<'a> Write for Handler<'a> {
 }
 
 impl guest::Handler for Handler<'_> {
+    /// The host broke a rule, or the shim's state is not what it relies on:
+    /// end the run as a refusal does. (sallyport's `attacked()` loops on
+    /// `exit_group()`, which never ends a thread that came in through the
+    /// direct entry: there it only arranges the return to the thread loop,
+    /// so the keep would spin forever.)
+    #[track_caller]
+    fn attacked(&mut self) -> ! {
+        let at = core::panic::Location::caller();
+        self.fail_stop(format_args!("attacked ({}:{})", at.file(), at.line()))
+    }
+
     fn sally(&mut self) -> sallyport::Result<()> {
         // Every request reaches the host through here. Once the keep is
         // sealed, only those the thread has a permit for do: whatever path
@@ -579,11 +592,21 @@ impl guest::Handler for Handler<'_> {
             return Ok(new_tid);
         }
 
+        // If no thread can be had, the run ends rather than the clone()
+        // fails: a build step that saw EAGAIN could take another path (make
+        // running fewer jobs, a program falling back to one thread), one the
+        // host would have chosen by refusing the thread.
         let mut threads_free_guard = THREADS_FREE.write();
 
         let addr = if *threads_free_guard == 0 {
             debugln!(self, "[{tid}] allocating new thread");
-            self.permit(|h| h.thread_mem_alloc()).map_err(|_| EAGAIN)? as usize
+            match self.permit(|h| h.thread_mem_alloc()) {
+                Ok(tcs) => tcs as usize,
+                Err(e) => {
+                    drop(threads_free_guard);
+                    self.fail_stop(format_args!("no memory for a new thread (error {e})"))
+                }
+            }
         } else {
             *threads_free_guard -= 1;
             0
@@ -597,7 +620,9 @@ impl guest::Handler for Handler<'_> {
 
         let ret = self.permit(|h| h.spawn(addr));
         debugln!(self, "[{tid}] spawn() = {ret:#?}");
-        ret?;
+        if let Err(e) = ret {
+            self.fail_stop(format_args!("the host did not start a thread (error {e})"));
+        }
 
         Ok(new_tid)
     }
@@ -809,13 +834,10 @@ impl guest::Handler for Handler<'_> {
             CLOCK_MONOTONIC | CLOCK_MONOTONIC_RAW | CLOCK_MONOTONIC_COARSE | CLOCK_BOOTTIME => {
                 false
             }
-            // A sealed keep does not ask the host for its CPU time (glibc's
-            // `clock()`): the monotonic clock stands in for it.
-            CLOCK_PROCESS_CPUTIME_ID | CLOCK_THREAD_CPUTIME_ID
-                if SEALED.load(Ordering::Acquire) =>
-            {
-                false
-            }
+            // The keep does not ask the host for its CPU time (glibc's
+            // `clock()`) either: the monotonic clock, which starts at 0 with
+            // the keep, stands in for it.
+            CLOCK_PROCESS_CPUTIME_ID | CLOCK_THREAD_CPUTIME_ID => false,
             _ => return self.execute(ClockGettime { clockid, tp })?,
         };
         let ns = self.clock_ns(realtime);
@@ -851,8 +873,8 @@ impl guest::Handler for Handler<'_> {
                         Some(self.clock_ns(false).saturating_add(timespec_ns(t)))
                     }
                     Some(t) if realtime => {
-                        let offset = self.clock_ns(true) - self.clock_ns(false);
-                        Some(timespec_ns(t).saturating_sub(offset))
+                        self.clock_ready();
+                        Some(clock::realtime_to_monotonic(timespec_ns(t)))
                     }
                     Some(t) => Some(timespec_ns(t)),
                 };
@@ -1318,24 +1340,25 @@ impl<'a> Handler<'a> {
         if SEALED.load(Ordering::Acquire) {
             return;
         }
-        if !clock::ready() {
-            self.clock_init();
-        }
+        self.clock_ready();
         self.map_heap_on_host(&HEAP.read());
         SEALED.store(true, Ordering::Release);
     }
 
     /// End the run: the sealed keep was asked for `what` (`a`, `b`), which
-    /// it does not serve. Say so on the console, then ask the host to exit
-    /// the process, the one thing still allowed. Never returns, so nothing
-    /// of the request goes further, and the payload never sees an error.
+    /// it does not serve (see [`Self::fail_stop`]).
     fn sealed_refuse(&mut self, what: &str, a: u64, b: u64) -> ! {
+        self.fail_stop(format_args!("sealed keep: refused {what} {a} ({b:#x})"))
+    }
+
+    /// End the whole run, because of `why`. Say so on the console, then ask
+    /// the host to exit the process, the one thing a sealed keep still
+    /// allows. Never returns, so nothing of the request that led here goes
+    /// further, and the payload never sees an error.
+    fn fail_stop(&mut self, why: core::fmt::Arguments<'_>) -> ! {
         self.tcb.host_permit = true;
         let mut line = Line::new();
-        let _ = writeln!(
-            line,
-            "[shim] sealed keep: refused {what} {a} ({b:#x}), exiting"
-        );
+        let _ = writeln!(line, "[shim] {why}, exiting");
         // Unless this thread holds the console lock: then it says nothing.
         if let Some(mut console) = CONSOLE.try_lock() {
             let kept = console.push(STDERR_FILENO as u8, line.as_bytes());
@@ -1352,7 +1375,7 @@ impl<'a> Handler<'a> {
         store_counters(PHASE_AT_EXIT);
         loop {
             let _ = self.execute(sys::ExitGroup {
-                status: SEALED_EXIT,
+                status: FAIL_STOP_EXIT,
             });
         }
     }
@@ -1372,14 +1395,20 @@ impl<'a> Handler<'a> {
 
     /// Nanoseconds of the real-time or monotonic clock, from the TSC.
     fn clock_ns(&mut self, realtime: bool) -> u64 {
-        if !clock::ready() {
-            self.clock_init();
-        }
+        self.clock_ready();
         clock::now_ns(realtime)
     }
 
-    /// Anchor the TSC clock to the host clock. This is the only time the
-    /// clock asks the host; it happens on the first clock read or when the
+    /// Anchor the clocks unless they are.
+    fn clock_ready(&mut self) {
+        if !clock::ready() {
+            self.clock_init();
+        }
+    }
+
+    /// Anchor the clocks at the TSC (see [`crate::clock`]). The host helps
+    /// only to find out how fast the TSC counts; no clock reading carries a
+    /// value it gives. This happens on the first clock read or when the
     /// thread pool starts, during keep startup.
     fn clock_init(&mut self) {
         let host = |h: &mut Self, clockid| {
@@ -1397,7 +1426,8 @@ impl<'a> Handler<'a> {
         };
 
         // TSC frequency: CPUID leaf 0x15 if it reports one, otherwise
-        // measured against the host's monotonic clock over ~20 ms.
+        // measured against the host's monotonic clock over ~20 ms. Either
+        // way the host says it; a frequency out of range ends the run.
         let mut leaf = CpuidResult {
             eax: 0,
             ebx: 0,
@@ -1413,26 +1443,30 @@ impl<'a> Handler<'a> {
         } else {
             let t0 = host(self, CLOCK_MONOTONIC);
             let c0 = clock::rdtsc();
-            while clock::rdtsc() - c0 < 50_000_000 {
+            while clock::rdtsc().wrapping_sub(c0) < 50_000_000 {
                 core::hint::spin_loop();
             }
             let t1 = host(self, CLOCK_MONOTONIC);
             let c1 = clock::rdtsc();
-            ((c1 - c0) as u128 * NSEC_PER_SEC as u128 / (t1 - t0) as u128) as u64
+            match t1.checked_sub(t0) {
+                Some(ns) if ns > 0 => {
+                    (c1.wrapping_sub(c0) as u128 * NSEC_PER_SEC as u128 / ns as u128) as u64
+                }
+                _ => self.attacked(),
+            }
         };
 
-        let monotonic = host(self, CLOCK_MONOTONIC);
-        let realtime = host(self, CLOCK_REALTIME);
-        clock::init(hz, clock::rdtsc(), monotonic, realtime);
+        if !clock::init(hz) {
+            debugln!(self, "clock: TSC {hz} Hz is out of range");
+            self.attacked();
+        }
         debugln!(self, "clock: TSC {hz} Hz");
     }
 
     /// Start the threads that wait in the enclave for `clone()`, and anchor
     /// the clock, while the keep is still starting up.
     fn start_thread_pool(&mut self) {
-        if !clock::ready() {
-            self.clock_init();
-        }
+        self.clock_ready();
         for _ in 0..POOL_THREADS {
             let tcs = match self.thread_mem_alloc() {
                 Ok(tcs) => tcs as usize,
@@ -1507,6 +1541,21 @@ impl<'a> Handler<'a> {
                 }
                 self.phase(n);
                 self.ssa.gpr.rax = 0;
+                self.ssa.gpr.rdx = orig_rdx;
+            }
+            SYS_CLOCK_EPOCH => {
+                // The epoch the workload declares, once, before the build (a
+                // sealed keep refused this above).
+                let epoch_ns = self.ssa.gpr.rdi;
+                self.clock_ready();
+                let ret = if epoch_ns > i64::MAX as u64 {
+                    -EINVAL
+                } else if clock::declare_epoch(epoch_ns) {
+                    0
+                } else {
+                    -EPERM
+                };
+                self.ssa.gpr.rax = ret as u64;
                 self.ssa.gpr.rdx = orig_rdx;
             }
             SYS_GETKEY => {
@@ -1814,6 +1863,17 @@ impl<'a> Handler<'a> {
                     );
                     self.attacked();
                 }
+            }
+        }
+
+        // Nothing changes if one record already gives the region this
+        // access. mmledger 0.4 would even fail on such a region when it ends
+        // where the record ends and another record follows, as wasmtime asks
+        // for when it grows a linear memory that has no guard region after
+        // it to its whole reservation.
+        if let Some((record, current)) = heap.record_at(addr) {
+            if addr + length <= record.end && current & !Access::MMAPPED == access {
+                return Ok(());
             }
         }
 
@@ -2213,7 +2273,8 @@ impl<'a> Handler<'a> {
 mod tests {
     use super::{sealed_allows, SYS_GETTID, SYS_PRCTL, SYS_PROCESS_VM_WRITEV, SYS_TKILL};
     use sallyport::item::enarxcall::{
-        SYS_COMMITSHM, SYS_DIRECT_INIT, SYS_GETATT, SYS_GETKEY, SYS_MAPSHM, SYS_PHASE, SYS_SALLY,
+        SYS_CLOCK_EPOCH, SYS_COMMITSHM, SYS_DIRECT_INIT, SYS_GETATT, SYS_GETKEY, SYS_MAPSHM,
+        SYS_PHASE, SYS_SALLY,
     };
     use sallyport::libc::{
         SYS_brk, SYS_clock_gettime, SYS_clone, SYS_close, SYS_exit, SYS_exit_group, SYS_fcntl,
@@ -2279,6 +2340,13 @@ mod tests {
             for fd in [3, (1 << 32) | 1, u64::MAX] {
                 assert!(!sealed_allows(nr, fd), "syscall {nr} on fd {fd:#x}");
             }
+        }
+    }
+
+    #[test]
+    fn sealed_keep_keeps_its_epoch() {
+        for arg0 in [0, 1, 1_760_659_200_000_000_000] {
+            assert!(!sealed_allows(SYS_CLOCK_EPOCH, arg0));
         }
     }
 

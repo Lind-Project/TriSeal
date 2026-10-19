@@ -85,6 +85,9 @@ pub struct Invocation<'a> {
     pub env: &'a HashMap<String, String>,
     /// Modules loaded before the main module (`NAME=PATH`)
     pub preloads: &'a [(String, PathBuf)],
+    /// Seconds since the Unix epoch that the real-time clock read when the
+    /// workload started (`[clock] epoch`)
+    pub clock_epoch: u64,
 }
 
 /// How the lind-wasm run ended.
@@ -202,6 +205,7 @@ impl Attestor {
                 "argv": invocation.argv,
                 "env": env,
                 "preloads": preloads,
+                "clock": { "epoch": invocation.clock_epoch },
             },
             "signer": self.signer(),
         });
@@ -547,6 +551,7 @@ mod tests {
             argv: &argv,
             env: &env,
             preloads: &[],
+            clock_epoch: 1_760_659_200,
         })
         .unwrap();
         a.end(Outcome::Exited(3)).unwrap();
@@ -569,6 +574,7 @@ mod tests {
         assert_eq!(p["runId"], run_id);
         assert_eq!(p["invocation"]["argv"], json!(argv));
         assert_eq!(p["invocation"]["env"]["PRELOADS"], "/hello.cwasm");
+        assert_eq!(p["invocation"]["clock"]["epoch"], 1_760_659_200);
         assert_eq!(p["keep"]["technology"], "sgx");
         assert_eq!(
             p["keep"]["certificates"][0]["sha256"],
@@ -601,6 +607,7 @@ mod tests {
             argv: &[],
             env: &HashMap::new(),
             preloads: &[],
+            clock_epoch: 0,
         })
         .unwrap();
         let err = anyhow!("trap").context("failed to run");
@@ -655,6 +662,7 @@ mod tests {
             argv: &[],
             env: &HashMap::new(),
             preloads: &[],
+            clock_epoch: 0,
         })
         .unwrap();
         let public: PublicKey = serde_json::from_slice(
@@ -698,6 +706,7 @@ mod tests {
             argv: &[],
             env: &HashMap::new(),
             preloads: &[],
+            clock_epoch: 0,
         })
         .unwrap();
         assert!(a.evidence(&evidence_request("not a digest")).is_err());

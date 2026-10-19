@@ -36,6 +36,10 @@ pub const CONFIG_TEMPLATE: &str = r#"## Configuration for a WASI application in 
 # stderr = false
 # disabled = false
 
+## Date the real-time clock reads when the workload starts (the host's is never used)
+# [clock]
+# epoch = 1760659200   # seconds since 1970-01-01T00:00:00Z
+
 ## Pre-opened file descriptors
 [[files]]
 kind = "stdin"
@@ -165,6 +169,30 @@ pub struct Config {
     /// in-toto attestation of the workload run
     #[serde(default)]
     pub intoto: InToto,
+
+    /// The real-time clock of the workload run
+    #[serde(default)]
+    pub clock: Clock,
+}
+
+/// The real-time clock of the workload run
+///
+/// The keep never asks the host for the time of day: the real-time clock
+/// reads `epoch` when the workload starts and advances from there with the
+/// TSC, and the monotonic clock starts at 0. The epoch is thus an input of
+/// the run like its arguments, and `run-start` records it with them.
+///
+/// ```toml
+/// [clock]
+/// epoch = 1760659200   # seconds since 1970-01-01T00:00:00Z (default 0)
+/// ```
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Clock {
+    /// Seconds since the Unix epoch that the real-time clock reads when the
+    /// workload starts (as `SOURCE_DATE_EPOCH` gives a build its date)
+    #[serde(default)]
+    pub epoch: u64,
 }
 
 /// Host files mapped outside the keep before lind starts, for a grate to
@@ -208,6 +236,7 @@ impl Default for Config {
             steward: None, // TODO: Default to a deployed Steward instance
             shm: None,
             intoto: InToto::default(),
+            clock: Clock::default(),
         }
     }
 }

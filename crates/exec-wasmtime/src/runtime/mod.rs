@@ -4,6 +4,7 @@
 
 mod admission;
 mod attest;
+mod clock;
 mod identity;
 mod io;
 mod shm;
@@ -32,6 +33,11 @@ impl Runtime {
     pub fn execute(package: Package) -> anyhow::Result<Vec<Val>> {
         let workload: Workload = package.try_into()?;
         let config = workload.config.clone().unwrap_or_default();
+
+        // From here on the real-time clock reads the declared date: the
+        // certificates, run-start and the whole build see it, never the
+        // host's.
+        clock::declare(config.clock.epoch).context("failed to declare the [clock] epoch")?;
 
         let (prvkey, crtreq, report) =
             identity::generate().context("failed to generate a private key and CSR")?;
@@ -70,6 +76,10 @@ impl Runtime {
             precompile: false,
             wasmtime_backtrace: false,
             enable_fpcast: false,
+            // The shim maps every page readable, so memory safety must not
+            // rest on guard regions: the allowlisted modules are compiled
+            // with explicit bounds checks, and the engine refuses others.
+            explicit_bounds_checks: true,
             wasm_bytes: Some(workload.webasm.clone()),
 
             // args[0] is still guest argv[0], even though module bytes come from wasm_bytes.
@@ -106,6 +116,7 @@ impl Runtime {
                     argv: &options.args,
                     env: &config.env,
                     preloads: &options.preloads,
+                    clock_epoch: config.clock.epoch,
                 })
                 .context("failed to emit in-toto run-start attestation")?;
 
