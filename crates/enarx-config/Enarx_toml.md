@@ -42,6 +42,60 @@ args = [
 steward = "https://attest.profian.com"
 ```
 
+### `intoto`
+
+`intoto` configures the in-toto attestation of the run. Two attestations are produced per
+run, one right before the lind-wasm runtime starts (`run-start`) and one right after it ends
+(`run-end`). Each is an in-toto Statement v1 in a DSSE v1 envelope, signed with the keep
+identity key, so it chains to the TEE attestation of the keep.
+
+| key        | default | meaning                                                                 |
+|------------|---------|-------------------------------------------------------------------------|
+| `dir`      | unset   | Host directory the files are written to. Unset: printed to stderr.      |
+| `stderr`   | `false` | Also print the attestations to stderr when `dir` is set.                |
+| `disabled` | `false` | Do not produce attestations.                                            |
+
+With `dir` set, every run `<id>` writes three files there:
+
+* `lind-wasm-run-start.<id>.intoto.json`: subject `main.wasm` (sha256/sha512 of the module),
+  predicate `https://lind-project.org/attestation/lind-wasm/run-start/v1` with the guest
+  argv/env/preloads and clock epoch, the TEE technology, the keep identity key and
+  certificate digests, and the signer.
+* `lind-wasm-run-end.<id>.intoto.json`: same subject, predicate
+  `https://lind-project.org/attestation/lind-wasm/run-end/v1` with the exit code or runtime
+  error, the duration, and the sha256 of the `run-start` file.
+* `lind-wasm-signer.<id>.pub.json`: the public key in in-toto (securesystemslib) format.
+
+A workload that records its own evidence (the in-toto grate) gets `run-end` during the run
+instead: its first cage hands in the key it signs with and the hash of the last statement of
+its chain (lind's `LIND_EVIDENCE`), and `run-end`, which names both, goes back to it with
+`run-start`, the identity key and the TEE attestation report, to be dumped with the build's
+outputs. No `run-end` file is written then; once the build has started, a sealed keep lets
+nothing out but its console and dump region.
+
+#### Example
+
+```toml
+[intoto]
+dir = "/var/lib/enarx/attestations"
+```
+
+### `clock`
+
+`clock` declares the date the run sees. An SGX keep never asks the host for the time of
+day: the real-time clock reads `epoch` (seconds since 1970-01-01T00:00:00Z, default 0)
+when the workload starts and advances from there with the TSC, and the monotonic clock
+(also standing in for the CPU-time clocks) starts at 0 when the keep starts. Neither ever
+reads less than it did before, even if the host moves the TSC. `run-start` records the
+epoch under `invocation.clock`, with the other inputs of the run.
+
+#### Example
+
+```toml
+[clock]
+epoch = 1760659200
+```
+
 ### `files`
 
 `files` specifies an array of file descriptor definitions to be pre-opened for the WASM application.

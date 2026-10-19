@@ -87,9 +87,31 @@ fn csr(pki: &PrivateKeyInfo<'_>, exts: Vec<Extension>) -> anyhow::Result<Vec<u8>
     .context("failed to encode CSR")
 }
 
-/// Generates a new private key and corresponding CSR
+/// Name of the TEE technology the keep runs on: `sgx`, `snp` or `kvm`.
+pub fn technology() -> anyhow::Result<&'static str> {
+    let platform = Platform::get().context("failed to query platform")?;
+    Ok(match platform.technology() {
+        Technology::Sgx => "sgx",
+        Technology::Snp => "snp",
+        Technology::Kvm => "kvm",
+    })
+}
+
+/// DER-encoded `SubjectPublicKeyInfo` of a PKCS#8 private key produced by [`generate`].
+pub fn public_key_der(key: impl AsRef<[u8]>) -> anyhow::Result<Vec<u8>> {
+    let pki = PrivateKeyInfo::from_der(key.as_ref())
+        .context("failed to parse DER-encoded private key")?;
+    pki.public_key()
+        .context("failed to get public key")?
+        .to_der()
+        .context("failed to get der-encoded public key")
+}
+
+/// Generates a new private key, the corresponding CSR and the TEE
+/// attestation report (SGX: a quote) whose report data is the hash of the
+/// public key
 #[instrument]
-pub fn generate() -> anyhow::Result<(Zeroizing<Vec<u8>>, Vec<u8>)> {
+pub fn generate() -> anyhow::Result<(Zeroizing<Vec<u8>>, Vec<u8>, Vec<u8>)> {
     let platform = Platform::get().context("failed to query platform")?;
     let cert_algo = match platform.technology() {
         Technology::Snp => SECP_384_R_1,
@@ -125,14 +147,14 @@ pub fn generate() -> anyhow::Result<(Zeroizing<Vec<u8>>, Vec<u8>)> {
     let ext = vec![Extension {
         extn_id: platform.technology().into(),
         critical: false,
-        extn_value: OctetString::new(attestation_report)
+        extn_value: OctetString::new(attestation_report.clone())
             .context("failed to wrap attestation evidence in `OctetString`")?,
     }];
 
     // Make a certificate signing request.
     let req = csr(&pki, ext).context("failed to generate a CSR")?;
 
-    Ok((raw, req))
+    Ok((raw, req, attestation_report))
 }
 
 #[instrument(skip(csr))]
