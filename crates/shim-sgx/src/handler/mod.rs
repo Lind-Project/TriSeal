@@ -524,6 +524,9 @@ impl guest::Handler for Handler<'_> {
         if addr > max {
             self.map_heap_on_host(&heap);
             self.mmap_guest(max, addr - max, RWX);
+            // Zero reused pages after releasing HEAP: the range is not yet returned.
+            drop(heap);
+            crate::dirty::zero_range(max.raw(), addr.raw());
         }
 
         Ok(addr.into_nonnull())
@@ -1735,7 +1738,10 @@ impl<'a> Handler<'a> {
         );
 
         if lazy == MMapStrategy::Lazy {
-            // Allocate all paged on-demand.
+            // Allocate all paged on-demand. Zero reused pages after releasing
+            // HEAP: no other thread knows this range yet.
+            drop(heap);
+            crate::dirty::zero_range(addr.raw(), addr.raw() + length.bytes());
             return Ok(ret);
         }
 
@@ -1756,12 +1762,14 @@ impl<'a> Handler<'a> {
                 self.attacked()
             }
         }
+        drop(heap);
+        crate::dirty::zero_range(addr.raw(), addr.raw() + length.bytes());
         Ok(ret)
     }
 
     /// Commit pages: accept the pages the host adds with ENCLS[EAUG] on first
-    /// touch. Pages that are already committed are left alone; `munmap()`
-    /// zeroed them when they were last unmapped.
+    /// touch. Pages that are already committed are left alone; the mapping that
+    /// hands them out zeroes them (see `dirty`).
     fn mmap_guest(
         &mut self,
         addr: Address<usize, Page>,
@@ -1912,15 +1920,14 @@ impl<'a> Handler<'a> {
             return Ok(());
         }
 
-        // Committed pages are not given back to the host: zero them, so that
-        // the next mapping of the address starts clean, and keep them.
+        // Committed pages are not given back to the host: keep them, marked
+        // dirty, and zero them when the next mapping of the address is made.
         heap.munmap_with(addr, length, move |record: &Record<Access>| {
             debugln!(self, "[{tid}] sgx_unmap({:#?}", record);
 
             committed::for_each(record.region.start.raw(), record.region.end.raw(), |page| {
-                // Safety: the page is committed and belongs to the mapping
-                // being removed.
-                unsafe { core::ptr::write_bytes(page as *mut u8, 0, Page::SIZE) };
+                // Zeroed lazily when a new mapping hands the page out.
+                crate::dirty::insert(page);
             });
         })
         .map_err(|_| ENOMEM)?;
@@ -1988,6 +1995,7 @@ impl<'a> Handler<'a> {
                     .unwrap_or_else(|_| self.attacked());
             }
             committed::remove(raw);
+            crate::dirty::remove(raw);
         }
 
         Ok(())

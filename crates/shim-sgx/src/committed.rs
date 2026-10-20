@@ -3,9 +3,9 @@
 //! Pages of the enclave that have been committed (added by the host with
 //! ENCLS[EAUG] and accepted by the shim with ENCLU[EACCEPTCOPY]).
 //!
-//! The shim never gives a committed page back to the host: `munmap()` zeroes
-//! it and leaves it committed, so that it can be handed out again without
-//! leaving the enclave. One bit per page of the enclave address range.
+//! The shim never gives a committed page back to the host: `munmap()` leaves
+//! it committed, and the next mapping that hands it out zeroes it (see
+//! `dirty`), so that it can be used again without leaving the enclave. One bit per page of the enclave address range.
 
 use core::sync::atomic::{AtomicU64, Ordering};
 
