@@ -18,6 +18,7 @@ pub mod clock;
 pub mod committed;
 pub mod console;
 pub mod direct;
+pub mod dirty;
 pub mod entry;
 pub mod handler;
 pub mod heap;

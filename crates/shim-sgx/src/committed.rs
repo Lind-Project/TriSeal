@@ -3,9 +3,9 @@
 //! Pages of the enclave that have been committed (added by the host with
 //! ENCLS[EAUG] and accepted by the shim with ENCLU[EACCEPTCOPY]).
 //!
-//! The shim never gives a committed page back to the host: `munmap()` zeroes
-//! it and leaves it committed, so that it can be handed out again without
-//! leaving the enclave. One bit per page of the enclave address range.
+//! The shim never gives a committed page back to the host: `munmap()` leaves
+//! it committed, and the next mapping that hands it out zeroes it (see
+//! `dirty`), so that it can be used again without leaving the enclave. One bit per page of the enclave address range.
 
 use core::sync::atomic::{AtomicU64, Ordering};
 
@@ -42,6 +42,26 @@ pub fn insert(addr: usize) {
 pub fn remove(addr: usize) {
     let (word, bit) = index(addr);
     BITS[word].fetch_and(!bit, Ordering::Release);
+}
+
+/// The number of committed pages in `[start, end)`, or `limit` once it reaches it.
+pub fn count(start: usize, end: usize, limit: usize) -> usize {
+    let mut n = 0;
+    let mut addr = start;
+    while addr < end && n < limit {
+        let (word, bit) = index(addr);
+        let bits = BITS[word].load(Ordering::Acquire);
+        if bit == 1 && addr + 64 * Page::SIZE <= end {
+            n += bits.count_ones() as usize;
+            addr += 64 * Page::SIZE;
+            continue;
+        }
+        if bits & bit != 0 {
+            n += 1;
+        }
+        addr += Page::SIZE;
+    }
+    n.min(limit)
 }
 
 /// Call `f` with the address of every committed page in `[start, end)`.
