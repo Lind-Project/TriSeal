@@ -44,6 +44,26 @@ pub fn remove(addr: usize) {
     BITS[word].fetch_and(!bit, Ordering::Release);
 }
 
+/// The number of committed pages in `[start, end)`, or `limit` once it reaches it.
+pub fn count(start: usize, end: usize, limit: usize) -> usize {
+    let mut n = 0;
+    let mut addr = start;
+    while addr < end && n < limit {
+        let (word, bit) = index(addr);
+        let bits = BITS[word].load(Ordering::Acquire);
+        if bit == 1 && addr + 64 * Page::SIZE <= end {
+            n += bits.count_ones() as usize;
+            addr += 64 * Page::SIZE;
+            continue;
+        }
+        if bits & bit != 0 {
+            n += 1;
+        }
+        addr += Page::SIZE;
+    }
+    n.min(limit)
+}
+
 /// Call `f` with the address of every committed page in `[start, end)`.
 pub fn for_each(start: usize, end: usize, mut f: impl FnMut(usize)) {
     let mut addr = start;
