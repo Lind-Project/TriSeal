@@ -1,0 +1,45 @@
+[in-toto] lind-wasm-run-start.31947a92a6d4eaa1.intoto.json
+{
+  "payload": "eyJfdHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9TdGF0ZW1lbnQvdjEiLCJwcmVkaWNhdGUiOnsiaW52b2NhdGlvbiI6eyJhcmd2IjpbIm1haW4ud2FzbSIsIi9ob21lL3Jpc2hhYmhiL2V2aWQvZTJlL2dyYXRlcy9pbWZzLWdyYXRlLmN3YXNtIiwiLS1wcmVsb2FkLXNobSIsIi0tYXR0ZXN0IiwiLS1kdW1wLXNobSIsIi9ob21lL3Jpc2hhYmhiL3N0YWdlMC1zZWFsL2Jpbi9jZHJ1biIsIi9ob21lL3Jpc2hhYmhiL3N0YWdlMC1zZWFsL2V4ZWN0ZXN0L3N0YWdlMCIsIi9ob21lL3Jpc2hhYmhiL3N0YWdlMC1zZWFsL2Jpbi9ibGluayIsIi1tIiwiLWUiLCIuL0FNRDY0L2Jpbi9rYWVtIiwiLS12ZXJib3NlIiwiLS1zdHJpY3QiLCItLWZpbGUiLCIuL3Rlc3Qua2FlbSJdLCJjbG9jayI6eyJlcG9jaCI6MH0sImVudiI6eyJJTUZTX1JFU0VSVkVfTUIiOiI1MTIiLCJUTVBESVIiOiIvdG1wIn0sInByZWxvYWRzIjp7fX0sImtlZXAiOnsiY2VydGlmaWNhdGVzIjpbeyJzaGEyNTYiOiJiNjkxNTczZjM0ODNmZTBlNWJiODBjMDAxODE4ZjMzOTAxZDE1NWIwYmNiODU2M2RhOTY4YTk4YjRkNTEzYjkxIn1dLCJpZGVudGl0eUtleSI6eyJzaGEyNTYiOiIxZWYzYzZlOTc4ZjdlZWNmNzIyNzFiOGNmMmU3OGQzYzc3NmZlY2Y5MWY1MTY2MzI4N2E3Mjc1OTlhZTNhZWE1In0sInJlcG9ydCI6eyJzaGEyNTYiOiJlYzk0MmM2OTliODZlNzBkZmIwMDY4NmU5NjZmN2JlYzcxZmFhOTJlMTQ5NjkyMzk4NTI2NGU5MzZjOGZiNGUxIn0sInN0ZXdhcmQiOm51bGwsInRlY2hub2xvZ3kiOiJzZ3gifSwicnVuSWQiOiIzMTk0N2E5MmE2ZDRlYWExIiwicnVudGltZSI6eyJlbmdpbmUiOiJsaW5kLWJvb3QiLCJuYW1lIjoiZW5hcngtZXhlYy13YXNtdGltZSIsInZlcnNpb24iOiIwLjcuMSJ9LCJzaWduZXIiOnsiaXNLZWVwSWRlbnRpdHlLZXkiOnRydWUsImtleWlkIjoiNzUwZjgyNzBhOWFhODgzNTNjY2JiNDlmMTY4ZjQ2ZDJkYjg0ZjUwZTk2MTM4YzM3Mjc5YmIwMmFjYmZhNjQyNiIsImtleXR5cGUiOiJlY2RzYSIsInNjaGVtZSI6ImVjZHNhLXNoYTItbmlzdHAyNTYifSwic3RhcnRlZEF0IjoiMTk3MC0wMS0wMVQwMDowMDowMC4wNjVaIn0sInByZWRpY2F0ZVR5cGUiOiJodHRwczovL2xpbmQtcHJvamVjdC5vcmcvYXR0ZXN0YXRpb24vbGluZC13YXNtL3J1bi1zdGFydC92MSIsInN1YmplY3QiOlt7ImRpZ2VzdCI6eyJzaGEyNTYiOiJmNTYxZWU0MjdiZWMzZmViY2M4ZTdiYzI2Yjk2MGEzYjgxYzg1NjA2OWJhODYxNDQxMzE0NTk0MTAzMGZhNmU1Iiwic2hhNTEyIjoiYzVkOGU2NmVlMGUxMmI2MWVlMmYyNjQxYTc0NWFhNzY4ZmJhYmNlYjI1YjI5NTM3NmI4YmYzZWQ2YWU2ZTc0MTgzMGI4YmRmNGI5NDlmMGQ4NDhkNzA4ODQyYjhhMTJkM2E4MjE5OGY4NjliZGFjZGM0ZjM1ZWUxODE1NTAxZDgifSwibmFtZSI6Im1haW4ud2FzbSJ9XX0=",
+  "payloadType": "application/vnd.in-toto+json",
+  "signatures": [
+    {
+      "keyid": "750f8270a9aa88353ccbb49f168f46d2db84f50e96138c37279bb02acbfa6426",
+      "sig": "MEYCIQC3YZVPpZWTI5EGk8DCIktmbxcsr0fuoXMHmzzlQ2wxFAIhAMwKGboiBSWJ0VEChyPkF1Gg5f2tY6o65PvJQ18Koyek"
+    }
+  ]
+}
+[intoto-grate] signing key 9b5d8b46f72f70e142d1f6b96ac2c3fa40348c2340ff3c0a19895200bb7de056
+[fork-shared-error] mremap failed: Not supported (os error 95) user=0xffffc000 parent=0x7feffd3b0000 child=0x7feeec2bd000
+[fork-shared-error] mremap failed: Not supported (os error 95) user=0xffffe000 parent=0x7feffd3b2000 child=0x7feeec2bf000
+[intoto-grate] attested 1 (pipeline): 2 files, sha256 c1aa05ee643c8aec5637c4fb5b7d6b9351b35ae00fb7cfed517194a8db61da33
+[intoto-grate] attested 2 (sources): 1385 files, sha256 b0b2ec6a53f8a5fc89ca81eaff04970c0a258e14fdce84da52555878923896da
+[fork-shared-error] mremap failed: Not supported (os error 95) user=0xdb6c7000 parent=0x7fedbef2c000 child=0x7fecb30e0000
+[fork-shared-error] mremap failed: Not supported (os error 95) user=0xdb6c9000 parent=0x7fedbef2e000 child=0x7fecb30e2000
+I1970-01-01T00:00:05.699626:blink/random.c:88:3 generating weak random data
+ +> ./AMD64/bin/kaem --verbose --strict --file ./test2.kaem 
+ +> cd AMD64 
+ +> cd .. 
+ +> ./AMD64/bin/sha256sum -c amd64.answers 
+AMD64/bin/blood-elf: OK
+AMD64/bin/catm: OK
+AMD64/bin/chmod: OK
+AMD64/bin/cp: OK
+AMD64/bin/get_machine: OK
+AMD64/bin/hex2: OK
+AMD64/bin/kaem: OK
+AMD64/bin/M1: OK
+AMD64/bin/M2-Mesoplanet: OK
+AMD64/bin/M2-Planet: OK
+AMD64/bin/match: OK
+AMD64/bin/mkdir: OK
+AMD64/bin/replace: OK
+AMD64/bin/rm: OK
+AMD64/bin/sha256sum: OK
+AMD64/bin/ungz: OK
+AMD64/bin/unbz2: OK
+AMD64/bin/unxz: OK
+AMD64/bin/untar: OK
+ +> exec ./AMD64/bin/kaem --verbose --strict --file ./after.kaem 
+I1970-01-01T00:06:31.145687:blink/loader.c:841:4 ./AMD64/bin/kaem: can't emulate: Resource temporarily unavailable
+[exec-wasmtime] refused module ./AMD64/bin/kaem (sha256 6364de59b36f8575fd938779476a9a121878fc0e2d65cc01ae5372aad2d028b5): not in the allowlist

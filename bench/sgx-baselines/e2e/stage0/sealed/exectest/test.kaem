@@ -1,0 +1,1 @@
+./AMD64/bin/kaem --verbose --strict --file ./test2.kaem

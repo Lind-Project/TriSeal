@@ -1,0 +1,49 @@
+[in-toto] lind-wasm-run-start.388b3568ea0fe1ce.intoto.json
+{
+  "payload": "eyJfdHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9TdGF0ZW1lbnQvdjEiLCJwcmVkaWNhdGUiOnsiaW52b2NhdGlvbiI6eyJhcmd2IjpbIm1haW4ud2FzbSIsIi9ob21lL3Jpc2hhYmhiL2V2aWQvZTJlL2dyYXRlcy9pbWZzLWdyYXRlLmN3YXNtIiwiLS1wcmVsb2FkLXNobSIsIi0tYXR0ZXN0IiwiLS1kdW1wLXNobSIsIi9ob21lL3Jpc2hhYmhiL3N0YWdlMC1zZWFsL2Jpbi9jZHJ1biIsIi9ob21lL3Jpc2hhYmhiL3N0YWdlMC1zZWFsL2V4ZWN0ZXN0L3N0YWdlMCIsIi9ob21lL3Jpc2hhYmhiL3N0YWdlMC1zZWFsL2Jpbi9ibGluayIsIi1tIiwiLWUiLCIuL0FNRDY0L2Jpbi9rYWVtIiwiLS12ZXJib3NlIiwiLS1zdHJpY3QiLCItLWZpbGUiLCIuL3Rlc3Qua2FlbSJdLCJjbG9jayI6eyJlcG9jaCI6MH0sImVudiI6eyJJTUZTX1JFU0VSVkVfTUIiOiI1MTIiLCJUTVBESVIiOiIvdG1wIn0sInByZWxvYWRzIjp7fX0sImtlZXAiOnsiY2VydGlmaWNhdGVzIjpbeyJzaGEyNTYiOiIxOTEwOWY2MWE4ZTZjNGExMDIyMjcyZmJmM2U1MmYwYzc1NmMzMjlmM2ViYzY0YjNiYzYxODZiZDQwMWM3N2JlIn1dLCJpZGVudGl0eUtleSI6eyJzaGEyNTYiOiJjNDc3ZTlkOGU3ZGFhYjgzYWQ2MzA4ZGIwM2RhYWQ3OGYyZWYwNGYwOGZhYmI2NTcwM2I4MmZlYWJhYzVmYzM5In0sInJlcG9ydCI6eyJzaGEyNTYiOiI1YWI3NmQ5MGU4YTBjNGEwNjMyMDExNzY0YjM3MDg1NzFhY2FmMjg4YmEwNjUwNzZjNjI3NjBkOWM0ZjgxMTdhIn0sInN0ZXdhcmQiOm51bGwsInRlY2hub2xvZ3kiOiJzZ3gifSwicnVuSWQiOiIzODhiMzU2OGVhMGZlMWNlIiwicnVudGltZSI6eyJlbmdpbmUiOiJsaW5kLWJvb3QiLCJuYW1lIjoiZW5hcngtZXhlYy13YXNtdGltZSIsInZlcnNpb24iOiIwLjcuMSJ9LCJzaWduZXIiOnsiaXNLZWVwSWRlbnRpdHlLZXkiOnRydWUsImtleWlkIjoiNTY5ZDFjODRiYTkxNDg0ZTY5OTQ0MjZiOWE1OGE3YmZkZjI2OWI0MDEwMWJhNmM3ZDRkZTkzMTRiZTA3YjYyMCIsImtleXR5cGUiOiJlY2RzYSIsInNjaGVtZSI6ImVjZHNhLXNoYTItbmlzdHAyNTYifSwic3RhcnRlZEF0IjoiMTk3MC0wMS0wMVQwMDowMDowMC4wNjNaIn0sInByZWRpY2F0ZVR5cGUiOiJodHRwczovL2xpbmQtcHJvamVjdC5vcmcvYXR0ZXN0YXRpb24vbGluZC13YXNtL3J1bi1zdGFydC92MSIsInN1YmplY3QiOlt7ImRpZ2VzdCI6eyJzaGEyNTYiOiJmNTYxZWU0MjdiZWMzZmViY2M4ZTdiYzI2Yjk2MGEzYjgxYzg1NjA2OWJhODYxNDQxMzE0NTk0MTAzMGZhNmU1Iiwic2hhNTEyIjoiYzVkOGU2NmVlMGUxMmI2MWVlMmYyNjQxYTc0NWFhNzY4ZmJhYmNlYjI1YjI5NTM3NmI4YmYzZWQ2YWU2ZTc0MTgzMGI4YmRmNGI5NDlmMGQ4NDhkNzA4ODQyYjhhMTJkM2E4MjE5OGY4NjliZGFjZGM0ZjM1ZWUxODE1NTAxZDgifSwibmFtZSI6Im1haW4ud2FzbSJ9XX0=",
+  "payloadType": "application/vnd.in-toto+json",
+  "signatures": [
+    {
+      "keyid": "569d1c84ba91484e6994426b9a58a7bfdf269b40101ba6c7d4de9314be07b620",
+      "sig": "MEYCIQCpAPb483R4BcOqF3dTVkM2v2M3pDvj5BH06wjcDTE+FQIhAIftlAsIYvX7l5Y44R/PnydZOwn2h71udiK/n4+GnhNe"
+    }
+  ]
+}
+[intoto-grate] signing key 3dc48315796a9d189b68e12886649692b49c00932f722022271f71f424a6c18d
+[fork-shared-error] mremap failed: Not supported (os error 95) user=0xffffc000 parent=0x7feffd3b0000 child=0x7feeec2bd000
+[fork-shared-error] mremap failed: Not supported (os error 95) user=0xffffe000 parent=0x7feffd3b2000 child=0x7feeec2bf000
+[intoto-grate] attested 1 (pipeline): 2 files, sha256 2f1d6ef14286dba7ba32acc8ef9360577f90cfa1b66b2b4dd063b1bcca1ca1a7
+[intoto-grate] attested 2 (sources): 1385 files, sha256 b0b2ec6a53f8a5fc89ca81eaff04970c0a258e14fdce84da52555878923896da
+[fork-shared-error] mremap failed: Not supported (os error 95) user=0xdb6c7000 parent=0x7fedbef2c000 child=0x7fecb30c7000
+[fork-shared-error] mremap failed: Not supported (os error 95) user=0xdb6c9000 parent=0x7fedbef2e000 child=0x7fecb30c9000
+I1970-01-01T00:00:05.678281:blink/random.c:88:3 generating weak random data
+ +> ./AMD64/bin/kaem --verbose --strict --file ./test2.kaem 
+ +> cd AMD64 
+ +> cd .. 
+ +> ./AMD64/bin/sha256sum -c amd64.answers 
+AMD64/bin/blood-elf: OK
+AMD64/bin/catm: OK
+AMD64/bin/chmod: OK
+AMD64/bin/cp: OK
+AMD64/bin/get_machine: OK
+AMD64/bin/hex2: OK
+AMD64/bin/kaem: OK
+AMD64/bin/M1: OK
+AMD64/bin/M2-Mesoplanet: OK
+AMD64/bin/M2-Planet: OK
+AMD64/bin/match: OK
+AMD64/bin/mkdir: OK
+AMD64/bin/replace: OK
+AMD64/bin/rm: OK
+AMD64/bin/sha256sum: OK
+AMD64/bin/ungz: OK
+AMD64/bin/unbz2: OK
+AMD64/bin/unxz: OK
+AMD64/bin/untar: OK
+ +> exec ./AMD64/bin/kaem --verbose --strict --file ./after.kaem 
+I1970-01-01T00:06:30.854068:blink/map.c:127:4 mmap of fd 131 failed: Resource temporarily unavailable; copying instead
+ +> echo Replace me if you wish to do more 
+Replace me if you wish to do more
+[intoto-grate] attested 3 (products): 0 files, sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[in-toto] run-end signed for the recorder: key 3dc48315796a9d18, chain of 3, head a3100413d27b3bc10c3820d4fd502aad30431ae3fafe4d8fd80be54b3e046744
+[intoto-grate] evidence: 3 links, head a3100413d27b3bc10c3820d4fd502aad30431ae3fafe4d8fd80be54b3e046744, run-end signed by the runtime

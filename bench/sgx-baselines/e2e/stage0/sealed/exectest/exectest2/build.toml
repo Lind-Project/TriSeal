@@ -1,0 +1,10 @@
+args = ["/home/rishabhb/evid/e2e/grates/imfs-grate.cwasm", "--preload-shm", "--attest", "--dump-shm", "/home/rishabhb/stage0-seal/bin/cdrun", "/home/rishabhb/stage0-seal/exectest/stage0", "/home/rishabhb/stage0-seal/bin/blink", "-m", "-e", "./AMD64/bin/kaem", "--verbose", "--strict", "--file", "./test.kaem"]
+
+[env]
+TMPDIR = "/tmp"
+IMFS_RESERVE_MB = "512"
+
+[shm]
+preload = "/dev/shm/stage0-exectest.1594766.prld"
+dump = "/dev/shm/stage0-exectest.1594766.dump"
+dump_size = 268435456

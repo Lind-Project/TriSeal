@@ -1,0 +1,13 @@
+#ifndef BLINK_CONFIG_H_
+#define BLINK_CONFIG_H_
+#define DISABLE_JIT
+#define DISABLE_THREADS
+#define DISABLE_SOCKETS
+#define DISABLE_X87
+#define DISABLE_VFS
+#define HAVE_FORK
+#define HAVE_MEMCCPY
+#define HAVE_STRCHRNUL
+#define HAVE_VASPRINTF
+#define HAVE_MAP_ANONYMOUS
+#endif /* BLINK_CONFIG_H_ */

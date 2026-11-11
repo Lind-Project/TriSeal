@@ -1,0 +1,19 @@
+mkpreload: 1238 files, 29406270 bytes -> /dev/shm/stage0-evid.1567517.prld
+mkpreload: archive 1 (2 files, 20787880 bytes) sha256 97a7845d66715ea1b3f827a5a9d2e00350f3535575127fdeea646ab626cbd933
+mkpreload: archive 2 (1236 files, 8618390 bytes) sha256 4ff816e72bcaced4e41dfdee32a0061f5315ec4e30933df6ecd939ca1bad88dc
+wall 60 rc=0
+[intoto-grate] signing key 83a9d6dc7a6e188f3edb57ba24e62b31ddded062b639ab3a68a722882505eecc
+[intoto-grate] attested 1 (pipeline): 2 files, sha256 97a7845d66715ea1b3f827a5a9d2e00350f3535575127fdeea646ab626cbd933
+[intoto-grate] attested 2 (sources): 1236 files, sha256 4ff816e72bcaced4e41dfdee32a0061f5315ec4e30933df6ecd939ca1bad88dc
+[intoto-grate] attested 3 (products): 0 files, sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[intoto-grate] evidence: 3 links, head d4dbd93b5fa60cbf9d4714295bb9049640689fb0a6b381e734582fef0be4e0ea, run-end signed by the runtime
+mkpreload: 1 files -> /home/rishabhb/stage0-seal/run1/dump
+/home/rishabhb/stage0-seal/stage0-evid.sh: line 34: cd: /home/rishabhb/stage0-seal/run1/dump/out: No such file or directory
+quote: report data = SHA-256(identity key d0a18432babebf20...); MRENCLAVE fbaf620f0ec6f1d90eb9cacbceccbd9059f43a450aba151a4f9e9c53570f0d6a MRSIGNER 1b5090247f0bc6d6... (quote signature not checked here)
+run e27a7735b900c1ac: run-start and run-end signed by the identity key, workload f561ee427bec3feb...
+run-end names recorder key 83a9d6dc7a6e188f... and the last of 3 envelopes
+envelope 1 (pipeline): 2 files match the bundle
+envelope 2 (sources): 1236 files match the bundle
+envelope 3 (products): 0 files match the dump, exit status 32512
+evidence verified
+STAGE0-EVID-DONE

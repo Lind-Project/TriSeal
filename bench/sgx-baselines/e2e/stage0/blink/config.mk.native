@@ -1,0 +1,19 @@
+CC = cc
+AR = ar
+MODE ?= 
+TMPDIR = /home/lind/blink-wasm/o/tmp
+PREFIX = /usr/local
+CFLAGS = -fno-common -fpie -g -O2 -fno-omit-frame-pointer
+CPPFLAGS = -D_FILE_OFFSET_BITS=64 -D_DARWIN_C_SOURCE -D_DEFAULT_SOURCE -D_BSD_SOURCE -D_GNU_SOURCE
+UOPFLAGS = -fpatchable-function-entry=0,0 -fno-stack-protector -fno-sanitize=all -O2 -fomit-frame-pointer
+TARGET_ARCH = 
+LDFLAGS = -Wl,-z,noseparate-code -Wl,-z,norelro -Wl,-z,common-page-size=65536,-z,max-page-size=65536 -pie 
+LDLIBS = -lrt -lm 
+HOST_OS = GNU/Linux
+HOST_ARCH = x86_64
+HOST_SYSTEM = Linux
+CONFIG_HOSTNAME = 19c7c16413f6
+CONFIG_COMMAND = ./configure --disable-jit --disable-threads --disable-sockets
+CONFIG_ARGUMENTS = -DCONFIG_ARGUMENTS="\"--disable-jit --disable-threads --disable-sockets\""
+BLINK_UNAME_V = -DBLINK_UNAME_V="\"NOJIT NOSOCK\""
+ZLIB = o/$(MODE)/third_party/libz/zlib.a

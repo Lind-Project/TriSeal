@@ -1,0 +1,880 @@
+[in-toto] lind-wasm-run-start.ad3d5c6d19f59e4d.intoto.json
+{
+  "payload": "eyJfdHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9TdGF0ZW1lbnQvdjEiLCJwcmVkaWNhdGUiOnsiaW52b2NhdGlvbiI6eyJhcmd2IjpbIm1haW4ud2FzbSIsIi9ob21lL3Jpc2hhYmhiL2V2aWQvZTJlL2dyYXRlcy9pbWZzLWdyYXRlLmN3YXNtIiwiLS1wcmVsb2FkLXNobSIsIi0tYXR0ZXN0IiwiLS1kdW1wLXNobSIsIi9ob21lL3Jpc2hhYmhiL3N0YWdlMC1zZWFsL2Jpbi9jZHJ1biIsIi9ob21lL3Jpc2hhYmhiL3N0YWdlMC1zZWFsL3NyYyIsIi9ob21lL3Jpc2hhYmhiL3N0YWdlMC1zZWFsL2Jpbi9ibGluayIsIi1tIiwiLi9ib290c3RyYXAtc2VlZHMvUE9TSVgvQU1ENjQva2FlbS1vcHRpb25hbC1zZWVkIl0sImNsb2NrIjp7ImVwb2NoIjowfSwiZW52Ijp7IkRVTVBTIjoiL2hvbWUvcmlzaGFiaGIvc3RhZ2UwLXNlYWwvc3JjL0FNRDY0L2Jpbi9ibG9vZC1lbGY9b3V0L2Jsb29kLWVsZjsvaG9tZS9yaXNoYWJoYi9zdGFnZTAtc2VhbC9zcmMvQU1ENjQvYmluL2NhdG09b3V0L2NhdG07L2hvbWUvcmlzaGFiaGIvc3RhZ2UwLXNlYWwvc3JjL0FNRDY0L2Jpbi9jaG1vZD1vdXQvY2htb2Q7L2hvbWUvcmlzaGFiaGIvc3RhZ2UwLXNlYWwvc3JjL0FNRDY0L2Jpbi9jcD1vdXQvY3A7L2hvbWUvcmlzaGFiaGIvc3RhZ2UwLXNlYWwvc3JjL0FNRDY0L2Jpbi9nZXRfbWFjaGluZT1vdXQvZ2V0X21hY2hpbmU7L2hvbWUvcmlzaGFiaGIvc3RhZ2UwLXNlYWwvc3JjL0FNRDY0L2Jpbi9oZXgyPW91dC9oZXgyOy9ob21lL3Jpc2hhYmhiL3N0YWdlMC1zZWFsL3NyYy9BTUQ2NC9iaW4va2FlbT1vdXQva2FlbTsvaG9tZS9yaXNoYWJoYi9zdGFnZTAtc2VhbC9zcmMvQU1ENjQvYmluL00xPW91dC9NMTsvaG9tZS9yaXNoYWJoYi9zdGFnZTAtc2VhbC9zcmMvQU1ENjQvYmluL00yLU1lc29wbGFuZXQ9b3V0L00yLU1lc29wbGFuZXQ7L2hvbWUvcmlzaGFiaGIvc3RhZ2UwLXNlYWwvc3JjL0FNRDY0L2Jpbi9NMi1QbGFuZXQ9b3V0L00yLVBsYW5ldDsvaG9tZS9yaXNoYWJoYi9zdGFnZTAtc2VhbC9zcmMvQU1ENjQvYmluL21hdGNoPW91dC9tYXRjaDsvaG9tZS9yaXNoYWJoYi9zdGFnZTAtc2VhbC9zcmMvQU1ENjQvYmluL21rZGlyPW91dC9ta2RpcjsvaG9tZS9yaXNoYWJoYi9zdGFnZTAtc2VhbC9zcmMvQU1ENjQvYmluL3JlcGxhY2U9b3V0L3JlcGxhY2U7L2hvbWUvcmlzaGFiaGIvc3RhZ2UwLXNlYWwvc3JjL0FNRDY0L2Jpbi9ybT1vdXQvcm07L2hvbWUvcmlzaGFiaGIvc3RhZ2UwLXNlYWwvc3JjL0FNRDY0L2Jpbi9zaGEyNTZzdW09b3V0L3NoYTI1NnN1bTsvaG9tZS9yaXNoYWJoYi9zdGFnZTAtc2VhbC9zcmMvQU1ENjQvYmluL3VuZ3o9b3V0L3VuZ3o7L2hvbWUvcmlzaGFiaGIvc3RhZ2UwLXNlYWwvc3JjL0FNRDY0L2Jpbi91bmJ6Mj1vdXQvdW5iejI7L2hvbWUvcmlzaGFiaGIvc3RhZ2UwLXNlYWwvc3JjL0FNRDY0L2Jpbi91bnh6PW91dC91bnh6Oy9ob21lL3Jpc2hhYmhiL3N0YWdlMC1zZWFsL3NyYy9BTUQ2NC9iaW4vdW50YXI9b3V0L3VudGFyIiwiSU1GU19SRVNFUlZFX01CIjoiNTEyIiwiVE1QRElSIjoiL3RtcCJ9LCJwcmVsb2FkcyI6e319LCJrZWVwIjp7ImNlcnRpZmljYXRlcyI6W3sic2hhMjU2IjoiMThlZDI3YTg2OGY4OTRlZDQwNTcwYmRmODdiMTFjY2NjZDljYTVkMjEyYzM1YmQ3NTFiOWMyZmMxZGUyMmJmZCJ9XSwiaWRlbnRpdHlLZXkiOnsic2hhMjU2IjoiMzE1MjU1MjZkOTcwNDU0YWExOTY4MmUyMDZjMDZhNzE3N2IzM2Y4N2E2NzdmYjAyZmE1MmRhMzZlZDVjMTk0ZCJ9LCJyZXBvcnQiOnsic2hhMjU2IjoiMjViZjMxOWNhZWY3YmZhYjE0MjFkOTI1MmIzOWQ5MjYwNTZlYzZlNDgyNjM2OWM2Y2ZmYzBiODhhMjU4YzdlOSJ9LCJzdGV3YXJkIjpudWxsLCJ0ZWNobm9sb2d5Ijoic2d4In0sInJ1bklkIjoiYWQzZDVjNmQxOWY1OWU0ZCIsInJ1bnRpbWUiOnsiZW5naW5lIjoibGluZC1ib290IiwibmFtZSI6ImVuYXJ4LWV4ZWMtd2FzbXRpbWUiLCJ2ZXJzaW9uIjoiMC43LjEifSwic2lnbmVyIjp7ImlzS2VlcElkZW50aXR5S2V5Ijp0cnVlLCJrZXlpZCI6ImM0ODYxZTEzYjA5MWFiZWIyMzdhZDg1MTMzNTQzZGQ1NGQ0Yzg4OTY1ZjVkNWE0OTlkNTYyMmJiODk0Y2U1YjgiLCJrZXl0eXBlIjoiZWNkc2EiLCJzY2hlbWUiOiJlY2RzYS1zaGEyLW5pc3RwMjU2In0sInN0YXJ0ZWRBdCI6IjE5NzAtMDEtMDFUMDA6MDA6MDAuMDY0WiJ9LCJwcmVkaWNhdGVUeXBlIjoiaHR0cHM6Ly9saW5kLXByb2plY3Qub3JnL2F0dGVzdGF0aW9uL2xpbmQtd2FzbS9ydW4tc3RhcnQvdjEiLCJzdWJqZWN0IjpbeyJkaWdlc3QiOnsic2hhMjU2IjoiZjU2MWVlNDI3YmVjM2ZlYmNjOGU3YmMyNmI5NjBhM2I4MWM4NTYwNjliYTg2MTQ0MTMxNDU5NDEwMzBmYTZlNSIsInNoYTUxMiI6ImM1ZDhlNjZlZTBlMTJiNjFlZTJmMjY0MWE3NDVhYTc2OGZiYWJjZWIyNWIyOTUzNzZiOGJmM2VkNmFlNmU3NDE4MzBiOGJkZjRiOTQ5ZjBkODQ4ZDcwODg0MmI4YTEyZDNhODIxOThmODY5YmRhY2RjNGYzNWVlMTgxNTUwMWQ4In0sIm5hbWUiOiJtYWluLndhc20ifV19",
+  "payloadType": "application/vnd.in-toto+json",
+  "signatures": [
+    {
+      "keyid": "c4861e13b091abeb237ad85133543dd54d4c88965f5d5a499d5622bb894ce5b8",
+      "sig": "MEQCIE/K2J2iNkcBSg8ClbOgEnwINhL1Ux04FqK8WX2Zlk8PAiBvxB2Ao0/Tw3Fg4YPQf8FfLeHx4K2ZUbH+oBMrV4e9ng=="
+    }
+  ]
+}
+[intoto-grate] signing key 7f67b88053c909fd5c7ed8ce30975c1b6ea81bd622235932a817b5c837226218
+[fork-shared-error] mremap failed: Not supported (os error 95) user=0xffffc000 parent=0x7feffd3ab000 child=0x7feeec2b4000
+[fork-shared-error] mremap failed: Not supported (os error 95) user=0xffffe000 parent=0x7feffd3ad000 child=0x7feeec2b6000
+[intoto-grate] attested 1 (pipeline): 2 files, sha256 2f1d6ef14286dba7ba32acc8ef9360577f90cfa1b66b2b4dd063b1bcca1ca1a7
+[intoto-grate] attested 2 (sources): 1236 files, sha256 4ff816e72bcaced4e41dfdee32a0061f5315ec4e30933df6ecd939ca1bad88dc
+[fork-shared-error] mremap failed: Not supported (os error 95) user=0xde240000 parent=0x7fedc1aa3000 child=0x7fecb5c3a000
+[fork-shared-error] mremap failed: Not supported (os error 95) user=0xde242000 parent=0x7fedc1aa5000 child=0x7fecb5c3c000
+ +> ./bootstrap-seeds/POSIX/AMD64/kaem-optional-seed ./AMD64/mescc-tools-seed-kaem.kaem 
+ +> ./bootstrap-seeds/POSIX/AMD64/hex0-seed ./AMD64/hex0_AMD64.hex0 ./AMD64/artifact/hex0 
+ +> ./AMD64/artifact/hex0 ./AMD64/kaem-minimal.hex0 ./AMD64/artifact/kaem-0 
+ +> ./AMD64/artifact/kaem-0 ./AMD64/mescc-tools-mini-kaem.kaem 
+ +> ./AMD64/artifact/hex0 ./AMD64/hex1_AMD64.hex0 ./AMD64/artifact/hex1 
+ +> ./AMD64/artifact/hex1 ./AMD64/hex2_AMD64.hex1 ./AMD64/artifact/hex2-0 
+ +> ./AMD64/artifact/hex2-0 ./AMD64/catm_AMD64.hex2 ./AMD64/artifact/catm 
+ +> ./AMD64/artifact/catm ./AMD64/artifact/M0.hex2 ./AMD64/ELF-amd64.hex2 ./AMD64/M0_AMD64.hex2 
+ +> ./AMD64/artifact/hex2-0 ./AMD64/artifact/M0.hex2 ./AMD64/artifact/M0 
+ +> ./AMD64/artifact/M0 ./AMD64/cc_amd64.M1 ./AMD64/artifact/cc_amd64.hex2 
+ +> ./AMD64/artifact/catm ./AMD64/artifact/cc_amd64-0.hex2 ./AMD64/ELF-amd64.hex2 ./AMD64/artifact/cc_amd64.hex2 
+ +> ./AMD64/artifact/hex2-0 ./AMD64/artifact/cc_amd64-0.hex2 ./AMD64/artifact/cc_amd64 
+ +> ./AMD64/artifact/catm ./AMD64/artifact/M2-0.c ./M2libc/amd64/linux/bootstrap.c ./M2-Planet/cc.h ./M2libc/bootstrappable.c ./M2-Planet/cc_globals.c ./M2-Planet/cc_reader.c ./M2-Planet/cc_strings.c ./M2-Planet/cc_types.c ./M2-Planet/cc_emit.c ./M2-Planet/cc_core.c ./M2-Planet/cc_macro.c ./M2-Planet/cc.c 
+ +> ./AMD64/artifact/cc_amd64 ./AMD64/artifact/M2-0.c ./AMD64/artifact/M2-0.M1 
+ +> ./AMD64/artifact/catm ./AMD64/artifact/M2-0-0.M1 ./AMD64/amd64_defs.M1 ./AMD64/libc-core.M1 ./AMD64/artifact/M2-0.M1 
+ +> ./AMD64/artifact/M0 ./AMD64/artifact/M2-0-0.M1 ./AMD64/artifact/M2-0.hex2 
+ +> ./AMD64/artifact/catm ./AMD64/artifact/M2-0-0.hex2 ./AMD64/ELF-amd64.hex2 ./AMD64/artifact/M2-0.hex2 
+ +> ./AMD64/artifact/hex2-0 ./AMD64/artifact/M2-0-0.hex2 ./AMD64/artifact/M2 
+ +> ./AMD64/artifact/M2 --architecture amd64 -f ./M2libc/amd64/linux/bootstrap.c -f ./M2libc/bootstrappable.c -f ./mescc-tools/stringify.c -f ./mescc-tools/blood-elf.c --bootstrap-mode -o ./AMD64/artifact/blood-elf-0.M1 
+ +> ./AMD64/artifact/catm ./AMD64/artifact/blood-elf-0-0.M1 ./M2libc/amd64/amd64_defs.M1 ./M2libc/amd64/libc-core.M1 ./AMD64/artifact/blood-elf-0.M1 
+ +> ./AMD64/artifact/M0 ./AMD64/artifact/blood-elf-0-0.M1 ./AMD64/artifact/blood-elf-0.hex2 
+ +> ./AMD64/artifact/catm ./AMD64/artifact/blood-elf-0-0.hex2 ./M2libc/amd64/ELF-amd64.hex2 ./AMD64/artifact/blood-elf-0.hex2 
+ +> ./AMD64/artifact/hex2-0 ./AMD64/artifact/blood-elf-0-0.hex2 ./AMD64/artifact/blood-elf-0 
+ +> ./AMD64/artifact/M2 --architecture amd64 -f ./M2libc/amd64/linux/bootstrap.c -f ./M2libc/bootstrappable.c -f ./mescc-tools/stringify.c -f ./mescc-tools/M1-macro.c --bootstrap-mode --debug -o ./AMD64/artifact/M1-macro-0.M1 
+ +> ./AMD64/artifact/blood-elf-0 --64 --little-endian -f ./AMD64/artifact/M1-macro-0.M1 -o ./AMD64/artifact/M1-macro-0-footer.M1 
+ +> ./AMD64/artifact/catm ./AMD64/artifact/M1-macro-0-0.M1 ./M2libc/amd64/amd64_defs.M1 ./M2libc/amd64/libc-core.M1 ./AMD64/artifact/M1-macro-0.M1 ./AMD64/artifact/M1-macro-0-footer.M1 
+ +> ./AMD64/artifact/M0 ./AMD64/artifact/M1-macro-0-0.M1 ./AMD64/artifact/M1-macro-0.hex2 
+ +> ./AMD64/artifact/catm ./AMD64/artifact/M1-macro-0-0.hex2 ./M2libc/amd64/ELF-amd64-debug.hex2 ./AMD64/artifact/M1-macro-0.hex2 
+ +> ./AMD64/artifact/hex2-0 ./AMD64/artifact/M1-macro-0-0.hex2 ./AMD64/artifact/M1-0 
+ +> ./AMD64/artifact/M2 --architecture amd64 -f ./M2libc/sys/types.h -f ./M2libc/stddef.h -f ./M2libc/sys/utsname.h -f ./M2libc/amd64/linux/unistd.c -f ./M2libc/amd64/linux/fcntl.c -f ./M2libc/fcntl.c -f ./M2libc/amd64/linux/sys/stat.c -f ./M2libc/ctype.c -f ./M2libc/stdlib.c -f ./M2libc/stdarg.h -f ./M2libc/stdio.h -f ./M2libc/stdio.c -f ./M2libc/bootstrappable.c -f ./mescc-tools/hex2.h -f ./mescc-tools/hex2_linker.c -f ./mescc-tools/hex2_word.c -f ./mescc-tools/hex2.c --debug -o ./AMD64/artifact/hex2_linker-1.M1 
+ +> ./AMD64/artifact/blood-elf-0 --64 --little-endian -f ./AMD64/artifact/hex2_linker-1.M1 -o ./AMD64/artifact/hex2_linker-1-footer.M1 
+ +> ./AMD64/artifact/M1-0 --architecture amd64 --little-endian -f ./M2libc/amd64/amd64_defs.M1 -f ./M2libc/amd64/libc-full.M1 -f ./AMD64/artifact/hex2_linker-1.M1 -f ./AMD64/artifact/hex2_linker-1-footer.M1 -o ./AMD64/artifact/hex2_linker-1.hex2 
+ +> ./AMD64/artifact/catm ./AMD64/artifact/hex2_linker-1-0.hex2 ./M2libc/amd64/ELF-amd64-debug.hex2 ./AMD64/artifact/hex2_linker-1.hex2 
+ +> ./AMD64/artifact/hex2-0 ./AMD64/artifact/hex2_linker-1-0.hex2 ./AMD64/artifact/hex2-1 
+ +> ./AMD64/artifact/M2 --architecture amd64 -f ./M2libc/sys/types.h -f ./M2libc/stddef.h -f ./M2libc/amd64/linux/fcntl.c -f ./M2libc/fcntl.c -f ./M2libc/sys/utsname.h -f ./M2libc/amd64/linux/unistd.c -f ./M2libc/stdarg.h -f ./M2libc/string.c -f ./M2libc/ctype.c -f ./M2libc/stdlib.c -f ./M2libc/stdio.h -f ./M2libc/stdio.c -f ./M2libc/bootstrappable.c -f ./mescc-tools/stringify.c -f ./mescc-tools/M1-macro.c --debug -o ./AMD64/artifact/M1-macro-1.M1 
+ +> ./AMD64/artifact/blood-elf-0 --64 --little-endian -f ./AMD64/artifact/M1-macro-1.M1 -o ./AMD64/artifact/M1-macro-1-footer.M1 
+ +> ./AMD64/artifact/M1-0 --architecture amd64 --little-endian -f ./M2libc/amd64/amd64_defs.M1 -f ./M2libc/amd64/libc-full.M1 -f ./AMD64/artifact/M1-macro-1.M1 -f ./AMD64/artifact/M1-macro-1-footer.M1 -o ./AMD64/artifact/M1-macro-1.hex2 
+ +> ./AMD64/artifact/hex2-1 --architecture amd64 --little-endian --base-address 0x00600000 -f ./M2libc/amd64/ELF-amd64-debug.hex2 -f ./AMD64/artifact/M1-macro-1.hex2 -o ./AMD64/bin/M1 
+ +> ./AMD64/artifact/M2 --architecture amd64 -f ./M2libc/sys/types.h -f ./M2libc/stddef.h -f ./M2libc/sys/utsname.h -f ./M2libc/amd64/linux/unistd.c -f ./M2libc/amd64/linux/fcntl.c -f ./M2libc/fcntl.c -f ./M2libc/amd64/linux/sys/stat.c -f ./M2libc/ctype.c -f ./M2libc/stdlib.c -f ./M2libc/stdarg.h -f ./M2libc/stdio.h -f ./M2libc/stdio.c -f ./M2libc/bootstrappable.c -f ./mescc-tools/hex2.h -f ./mescc-tools/hex2_linker.c -f ./mescc-tools/hex2_word.c -f ./mescc-tools/hex2.c --debug -o ./AMD64/artifact/hex2_linker-2.M1 
+ +> ./AMD64/artifact/blood-elf-0 --64 --little-endian -f ./AMD64/artifact/hex2_linker-2.M1 -o ./AMD64/artifact/hex2_linker-2-footer.M1 
+ +> ./AMD64/bin/M1 --architecture amd64 --little-endian -f ./M2libc/amd64/amd64_defs.M1 -f ./M2libc/amd64/libc-full.M1 -f ./AMD64/artifact/hex2_linker-2.M1 -f ./AMD64/artifact/hex2_linker-2-footer.M1 -o ./AMD64/artifact/hex2_linker-2.hex2 
+ +> ./AMD64/artifact/hex2-1 --architecture amd64 --little-endian --base-address 0x00600000 -f ./M2libc/amd64/ELF-amd64-debug.hex2 -f ./AMD64/artifact/hex2_linker-2.hex2 -o ./AMD64/bin/hex2 
+ +> ./AMD64/artifact/M2 --architecture amd64 -f ./M2libc/sys/types.h -f ./M2libc/stddef.h -f ./M2libc/sys/utsname.h -f ./M2libc/amd64/linux/unistd.c -f ./M2libc/amd64/linux/fcntl.c -f ./M2libc/fcntl.c -f ./M2libc/ctype.c -f ./M2libc/stdlib.c -f ./M2libc/string.c -f ./M2libc/stdarg.h -f ./M2libc/stdio.h -f ./M2libc/stdio.c -f ./M2libc/bootstrappable.c -f ./mescc-tools/Kaem/kaem.h -f ./mescc-tools/Kaem/variable.c -f ./mescc-tools/Kaem/kaem_globals.c -f ./mescc-tools/Kaem/kaem.c --debug -o ./AMD64/artifact/kaem.M1 
+ +> ./AMD64/artifact/blood-elf-0 --64 --little-endian -f ./AMD64/artifact/kaem.M1 -o ./AMD64/artifact/kaem-footer.M1 
+ +> ./AMD64/bin/M1 --architecture amd64 --little-endian -f ./M2libc/amd64/amd64_defs.M1 -f ./M2libc/amd64/libc-full.M1 -f ./AMD64/artifact/kaem.M1 -f ./AMD64/artifact/kaem-footer.M1 -o ./AMD64/artifact/kaem.hex2 
+ +> ./AMD64/bin/hex2 --architecture amd64 --little-endian --base-address 0x00600000 -f ./M2libc/amd64/ELF-amd64-debug.hex2 -f ./AMD64/artifact/kaem.hex2 -o ./AMD64/bin/kaem 
+ +> ./AMD64/bin/kaem --verbose --strict --file ./AMD64/kaem.run 
+ +> ARCH=amd64 
+ +> ARCH_DIR=AMD64 
+ +> M2LIBC=../M2libc 
+ +> TOOLS=../AMD64/bin 
+ +> BLOOD_FLAG=--64 
+ +> BASE_ADDRESS=0x00600000 
+ +> ENDIAN_FLAG=--little-endian 
+ +> BINDIR=../AMD64/bin 
+ +> BUILDDIR=../AMD64/artifact 
+ +> TMPDIR=../AMD64/artifact 
+ +> OPERATING_SYSTEM=Linux 
+ +> ./AMD64/bin/kaem --verbose --strict --file AMD64/mescc-tools-full-kaem.kaem 
+ +> cd AMD64 
+ +> ./artifact/M2 --architecture amd64 -f ../M2libc/sys/types.h -f ../M2libc/stddef.h -f ../M2libc/amd64/linux/fcntl.c -f ../M2libc/fcntl.c -f ../M2libc/sys/utsname.h -f ../M2libc/amd64/linux/unistd.c -f ../M2libc/amd64/linux/sys/stat.c -f ../M2libc/ctype.c -f ../M2libc/stdlib.c -f ../M2libc/stdarg.h -f ../M2libc/stdio.h -f ../M2libc/stdio.c -f ../M2libc/string.c -f ../M2libc/bootstrappable.c -f ../M2-Mesoplanet/cc.h -f ../M2-Mesoplanet/cc_globals.c -f ../M2-Mesoplanet/cc_env.c -f ../M2-Mesoplanet/cc_reader.c -f ../M2-Mesoplanet/cc_spawn.c -f ../M2-Mesoplanet/cc_core.c -f ../M2-Mesoplanet/cc_macro.c -f ../M2-Mesoplanet/cc.c --debug -o ./artifact/M2-Mesoplanet-1.M1 
+ +> ./artifact/blood-elf-0 --little-endian --64 -f ./artifact/M2-Mesoplanet-1.M1 -o ./artifact/M2-Mesoplanet-1-footer.M1 
+ +> ./bin/M1 --architecture amd64 --little-endian -f ../M2libc/amd64/amd64_defs.M1 -f ../M2libc/amd64/libc-full.M1 -f ./artifact/M2-Mesoplanet-1.M1 -f ./artifact/M2-Mesoplanet-1-footer.M1 -o ./artifact/M2-Mesoplanet-1.hex2 
+ +> ./bin/hex2 --architecture amd64 --little-endian --base-address 0x00600000 -f ../M2libc/amd64/ELF-amd64-debug.hex2 -f ./artifact/M2-Mesoplanet-1.hex2 -o ./bin/M2-Mesoplanet 
+ +> ./artifact/M2 --architecture amd64 -f ../M2libc/sys/types.h -f ../M2libc/stddef.h -f ../M2libc/amd64/linux/fcntl.c -f ../M2libc/fcntl.c -f ../M2libc/sys/utsname.h -f ../M2libc/amd64/linux/unistd.c -f ../M2libc/ctype.c -f ../M2libc/stdlib.c -f ../M2libc/stdarg.h -f ../M2libc/stdio.h -f ../M2libc/stdio.c -f ../M2libc/bootstrappable.c -f ../mescc-tools/stringify.c -f ../mescc-tools/blood-elf.c --debug -o ./artifact/blood-elf-1.M1 
+ +> ./artifact/blood-elf-0 --64 --little-endian -f ./artifact/blood-elf-1.M1 -o ./artifact/blood-elf-1-footer.M1 
+ +> ./bin/M1 --architecture amd64 --little-endian -f ../M2libc/amd64/amd64_defs.M1 -f ../M2libc/amd64/libc-full.M1 -f ./artifact/blood-elf-1.M1 -f ./artifact/blood-elf-1-footer.M1 -o ./artifact/blood-elf-1.hex2 
+ +> ./bin/hex2 --architecture amd64 --little-endian --base-address 0x00600000 -f ../M2libc/amd64/ELF-amd64-debug.hex2 -f ./artifact/blood-elf-1.hex2 -o ./bin/blood-elf 
+ +> ./artifact/M2 --architecture amd64 -f ../M2libc/sys/types.h -f ../M2libc/stddef.h -f ../M2libc/sys/utsname.h -f ../M2libc/amd64/linux/unistd.c -f ../M2libc/amd64/linux/fcntl.c -f ../M2libc/fcntl.c -f ../M2libc/ctype.c -f ../M2libc/stdlib.c -f ../M2libc/stdarg.h -f ../M2libc/stdio.h -f ../M2libc/stdio.c -f ../M2libc/bootstrappable.c -f ../mescc-tools/get_machine.c --debug -o artifact/get_machine.M1 
+ +> ./bin/blood-elf --64 --little-endian -f ./artifact/get_machine.M1 -o ./artifact/get_machine-footer.M1 
+ +> ./bin/M1 --architecture amd64 --little-endian -f ../M2libc/amd64/amd64_defs.M1 -f ../M2libc/amd64/libc-full.M1 -f ./artifact/get_machine.M1 -f ./artifact/get_machine-footer.M1 -o ./artifact/get_machine.hex2 
+ +> ./bin/hex2 --architecture amd64 --little-endian --base-address 0x00600000 -f ../M2libc/amd64/ELF-amd64-debug.hex2 -f ./artifact/get_machine.hex2 -o ./bin/get_machine 
+ +> ./artifact/M2 --architecture amd64 -f ../M2libc/sys/types.h -f ../M2libc/stddef.h -f ../M2libc/sys/utsname.h -f ../M2libc/amd64/linux/unistd.c -f ../M2libc/amd64/linux/fcntl.c -f ../M2libc/fcntl.c -f ../M2libc/ctype.c -f ../M2libc/stdlib.c -f ../M2libc/stdarg.h -f ../M2libc/stdio.h -f ../M2libc/stdio.c -f ../M2libc/bootstrappable.c -f ../M2-Planet/cc.h -f ../M2-Planet/cc_globals.c -f ../M2-Planet/cc_reader.c -f ../M2-Planet/cc_strings.c -f ../M2-Planet/cc_types.c -f ../M2-Planet/cc_emit.c -f ../M2-Planet/cc_core.c -f ../M2-Planet/cc_macro.c -f ../M2-Planet/cc.c --debug -o ./artifact/M2-1.M1 
+ +> ./bin/blood-elf --little-endian --64 -f ./artifact/M2-1.M1 -o ./artifact/M2-1-footer.M1 
+ +> ./bin/M1 --architecture amd64 --little-endian -f ../M2libc/amd64/amd64_defs.M1 -f ../M2libc/amd64/libc-full.M1 -f ./artifact/M2-1.M1 -f ./artifact/M2-1-footer.M1 -o ./artifact/M2-1.hex2 
+ +> ./bin/hex2 --architecture amd64 --little-endian --base-address 0x00600000 -f ../M2libc/amd64/ELF-amd64-debug.hex2 -f ./artifact/M2-1.hex2 -o ./bin/M2-Planet 
+ +> cd .. 
+ +> cd mescc-tools-extra 
+ +> ../AMD64/bin/kaem --verbose --strict --file mescc-tools-extra.kaem 
+ +> set -ex 
+ +> set -ex
+ +> M2LIBC_PATH=../M2libc 
+ +> PATH=../AMD64/bin 
+ +> alias CC=../AMD64/bin/M2-Mesoplanet --operating-system Linux --architecture amd64 -f 
+ +> ../AMD64/bin/M2-Mesoplanet --operating-system Linux --architecture amd64 -f sha256sum.c -o ../AMD64/bin/sha256sum 
+reading file: <string.h>
+reading file: <string.c>
+reading file: <stddef.h>
+reading file: <sys/types.h>
+reading file: <stdlib.h>
+reading file: <unistd.h>
+reading file: <sys/utsname.h>
+skipping:
+../M2libc/uefi/unistd.c
+reading file: <x86/linux/unistd.c>
+reading file: <amd64/linux/unistd.c>
+reading file: <armv7l/linux/unistd.c>
+reading file: <aarch64/linux/unistd.c>
+reading file: <riscv32/linux/unistd.c>
+reading file: <signal.h>
+reading file: <riscv64/linux/unistd.c>
+reading file: <knight/linux/unistd.c>
+reading file: <knight/native/unistd.c>
+reading file: <stdlib.c>
+reading file: <sys/stat.h>
+skipping:
+../M2libc/uefi/sys/stat.c
+reading file: <x86/linux/sys/stat.c>
+reading file: <amd64/linux/sys/stat.c>
+reading file: <armv7l/linux/sys/stat.c>
+reading file: <aarch64/linux/sys/stat.c>
+reading file: <riscv32/linux/sys/stat.c>
+reading file: <riscv64/linux/sys/stat.c>
+reading file: <knight/linux/sys/stat.c>
+reading file: <knight/native/sys/stat.c>
+reading file: <fcntl.h>
+reading file: <fcntl.c>
+skipping:
+../M2libc/uefi/fcntl.c
+reading file: <x86/linux/fcntl.c>
+reading file: <amd64/linux/fcntl.c>
+reading file: <armv7l/linux/fcntl.c>
+reading file: <aarch64/linux/fcntl.c>
+reading file: <riscv32/linux/fcntl.c>
+reading file: <riscv64/linux/fcntl.c>
+reading file: <knight/linux/fcntl.c>
+reading file: <knight/native/fcntl.c>
+reading file: <ctype.h>
+reading file: <ctype.c>
+reading file: <stdio.h>
+reading file: <stdio.c>
+reading file: <stdarg.h>
+reading file: "M2libc/bootstrappable.h"
+reading file: <bootstrappable.c>
+# starting M2-Planet build
+M2-Planet --file ../AMD64/artifact/M2-Mesoplanet-000000 --output ../AMD64/artifact/M2-Planet-000000 --architecture amd64 --debug 
+# starting Blood-elf stub generation
+blood-elf --file ../AMD64/artifact/M2-Planet-000000 --little-endian --output ../AMD64/artifact/blood-elf-000000 --64 
+# starting M1 assembly
+M1 --file ../M2libc/amd64/amd64_defs.M1 --file ../M2libc/amd64/libc-full.M1 --file ../AMD64/artifact/M2-Planet-000000 --little-endian --architecture amd64 --file ../AMD64/artifact/blood-elf-000000 --output ../AMD64/artifact/M1-macro-000000 
+# starting hex2 linking
+hex2 --file ../M2libc/amd64/ELF-amd64-debug.hex2 --file ../AMD64/artifact/M1-macro-000000 --output ../AMD64/bin/sha256sum --architecture amd64 --base-address 0x00600000 --little-endian 
+ +> ../AMD64/bin/M2-Mesoplanet --operating-system Linux --architecture amd64 -f match.c -o ../AMD64/bin/match 
+reading file: <stdio.h>
+reading file: <stdio.c>
+reading file: <stdarg.h>
+reading file: <stddef.h>
+reading file: <sys/types.h>
+reading file: <sys/stat.h>
+skipping:
+../M2libc/uefi/sys/stat.c
+reading file: <x86/linux/sys/stat.c>
+reading file: <amd64/linux/sys/stat.c>
+reading file: <armv7l/linux/sys/stat.c>
+reading file: <aarch64/linux/sys/stat.c>
+reading file: <riscv32/linux/sys/stat.c>
+reading file: <riscv64/linux/sys/stat.c>
+reading file: <knight/linux/sys/stat.c>
+reading file: <knight/native/sys/stat.c>
+reading file: <fcntl.h>
+reading file: <fcntl.c>
+skipping:
+../M2libc/uefi/fcntl.c
+reading file: <x86/linux/fcntl.c>
+reading file: <amd64/linux/fcntl.c>
+reading file: <armv7l/linux/fcntl.c>
+reading file: <aarch64/linux/fcntl.c>
+reading file: <riscv32/linux/fcntl.c>
+reading file: <riscv64/linux/fcntl.c>
+reading file: <knight/linux/fcntl.c>
+reading file: <knight/native/fcntl.c>
+reading file: <unistd.h>
+reading file: <sys/utsname.h>
+skipping:
+../M2libc/uefi/unistd.c
+reading file: <x86/linux/unistd.c>
+reading file: <amd64/linux/unistd.c>
+reading file: <armv7l/linux/unistd.c>
+reading file: <aarch64/linux/unistd.c>
+reading file: <riscv32/linux/unistd.c>
+reading file: <signal.h>
+reading file: <riscv64/linux/unistd.c>
+reading file: <knight/linux/unistd.c>
+reading file: <knight/native/unistd.c>
+reading file: <stdlib.h>
+reading file: <stdlib.c>
+reading file: <ctype.h>
+reading file: <ctype.c>
+reading file: <string.h>
+reading file: <string.c>
+reading file: "M2libc/bootstrappable.h"
+reading file: <bootstrappable.c>
+# starting M2-Planet build
+M2-Planet --file ../AMD64/artifact/M2-Mesoplanet-000000 --output ../AMD64/artifact/M2-Planet-000000 --architecture amd64 --debug 
+# starting Blood-elf stub generation
+blood-elf --file ../AMD64/artifact/M2-Planet-000000 --little-endian --output ../AMD64/artifact/blood-elf-000000 --64 
+# starting M1 assembly
+M1 --file ../M2libc/amd64/amd64_defs.M1 --file ../M2libc/amd64/libc-full.M1 --file ../AMD64/artifact/M2-Planet-000000 --little-endian --architecture amd64 --file ../AMD64/artifact/blood-elf-000000 --output ../AMD64/artifact/M1-macro-000000 
+# starting hex2 linking
+hex2 --file ../M2libc/amd64/ELF-amd64-debug.hex2 --file ../AMD64/artifact/M1-macro-000000 --output ../AMD64/bin/match --architecture amd64 --base-address 0x00600000 --little-endian 
+ +> ../AMD64/bin/M2-Mesoplanet --operating-system Linux --architecture amd64 -f mkdir.c -o ../AMD64/bin/mkdir 
+reading file: <stdio.h>
+reading file: <stdio.c>
+reading file: <stdarg.h>
+reading file: <stddef.h>
+reading file: <sys/types.h>
+reading file: <sys/stat.h>
+skipping:
+../M2libc/uefi/sys/stat.c
+reading file: <x86/linux/sys/stat.c>
+reading file: <amd64/linux/sys/stat.c>
+reading file: <armv7l/linux/sys/stat.c>
+reading file: <aarch64/linux/sys/stat.c>
+reading file: <riscv32/linux/sys/stat.c>
+reading file: <riscv64/linux/sys/stat.c>
+reading file: <knight/linux/sys/stat.c>
+reading file: <knight/native/sys/stat.c>
+reading file: <fcntl.h>
+reading file: <fcntl.c>
+skipping:
+../M2libc/uefi/fcntl.c
+reading file: <x86/linux/fcntl.c>
+reading file: <amd64/linux/fcntl.c>
+reading file: <armv7l/linux/fcntl.c>
+reading file: <aarch64/linux/fcntl.c>
+reading file: <riscv32/linux/fcntl.c>
+reading file: <riscv64/linux/fcntl.c>
+reading file: <knight/linux/fcntl.c>
+reading file: <knight/native/fcntl.c>
+reading file: <unistd.h>
+reading file: <sys/utsname.h>
+skipping:
+../M2libc/uefi/unistd.c
+reading file: <x86/linux/unistd.c>
+reading file: <amd64/linux/unistd.c>
+reading file: <armv7l/linux/unistd.c>
+reading file: <aarch64/linux/unistd.c>
+reading file: <riscv32/linux/unistd.c>
+reading file: <signal.h>
+reading file: <riscv64/linux/unistd.c>
+reading file: <knight/linux/unistd.c>
+reading file: <knight/native/unistd.c>
+reading file: <stdlib.h>
+reading file: <stdlib.c>
+reading file: <ctype.h>
+reading file: <ctype.c>
+reading file: <string.h>
+reading file: <string.c>
+reading file: "M2libc/bootstrappable.h"
+reading file: <bootstrappable.c>
+# starting M2-Planet build
+M2-Planet --file ../AMD64/artifact/M2-Mesoplanet-000000 --output ../AMD64/artifact/M2-Planet-000000 --architecture amd64 --debug 
+# starting Blood-elf stub generation
+blood-elf --file ../AMD64/artifact/M2-Planet-000000 --little-endian --output ../AMD64/artifact/blood-elf-000000 --64 
+# starting M1 assembly
+M1 --file ../M2libc/amd64/amd64_defs.M1 --file ../M2libc/amd64/libc-full.M1 --file ../AMD64/artifact/M2-Planet-000000 --little-endian --architecture amd64 --file ../AMD64/artifact/blood-elf-000000 --output ../AMD64/artifact/M1-macro-000000 
+# starting hex2 linking
+hex2 --file ../M2libc/amd64/ELF-amd64-debug.hex2 --file ../AMD64/artifact/M1-macro-000000 --output ../AMD64/bin/mkdir --architecture amd64 --base-address 0x00600000 --little-endian 
+ +> ../AMD64/bin/M2-Mesoplanet --operating-system Linux --architecture amd64 -f untar.c -o ../AMD64/bin/untar 
+reading file: <stdio.h>
+reading file: <stdio.c>
+reading file: <stdarg.h>
+reading file: <stddef.h>
+reading file: <sys/types.h>
+reading file: <sys/stat.h>
+skipping:
+../M2libc/uefi/sys/stat.c
+reading file: <x86/linux/sys/stat.c>
+reading file: <amd64/linux/sys/stat.c>
+reading file: <armv7l/linux/sys/stat.c>
+reading file: <aarch64/linux/sys/stat.c>
+reading file: <riscv32/linux/sys/stat.c>
+reading file: <riscv64/linux/sys/stat.c>
+reading file: <knight/linux/sys/stat.c>
+reading file: <knight/native/sys/stat.c>
+reading file: <fcntl.h>
+reading file: <fcntl.c>
+skipping:
+../M2libc/uefi/fcntl.c
+reading file: <x86/linux/fcntl.c>
+reading file: <amd64/linux/fcntl.c>
+reading file: <armv7l/linux/fcntl.c>
+reading file: <aarch64/linux/fcntl.c>
+reading file: <riscv32/linux/fcntl.c>
+reading file: <riscv64/linux/fcntl.c>
+reading file: <knight/linux/fcntl.c>
+reading file: <knight/native/fcntl.c>
+reading file: <unistd.h>
+reading file: <sys/utsname.h>
+skipping:
+../M2libc/uefi/unistd.c
+reading file: <x86/linux/unistd.c>
+reading file: <amd64/linux/unistd.c>
+reading file: <armv7l/linux/unistd.c>
+reading file: <aarch64/linux/unistd.c>
+reading file: <riscv32/linux/unistd.c>
+reading file: <signal.h>
+reading file: <riscv64/linux/unistd.c>
+reading file: <knight/linux/unistd.c>
+reading file: <knight/native/unistd.c>
+reading file: <stdlib.h>
+reading file: <stdlib.c>
+reading file: <ctype.h>
+reading file: <ctype.c>
+reading file: <string.h>
+reading file: <string.c>
+reading file: "M2libc/bootstrappable.h"
+reading file: <bootstrappable.c>
+# starting M2-Planet build
+M2-Planet --file ../AMD64/artifact/M2-Mesoplanet-000000 --output ../AMD64/artifact/M2-Planet-000000 --architecture amd64 --debug 
+# starting Blood-elf stub generation
+blood-elf --file ../AMD64/artifact/M2-Planet-000000 --little-endian --output ../AMD64/artifact/blood-elf-000000 --64 
+# starting M1 assembly
+M1 --file ../M2libc/amd64/amd64_defs.M1 --file ../M2libc/amd64/libc-full.M1 --file ../AMD64/artifact/M2-Planet-000000 --little-endian --architecture amd64 --file ../AMD64/artifact/blood-elf-000000 --output ../AMD64/artifact/M1-macro-000000 
+# starting hex2 linking
+hex2 --file ../M2libc/amd64/ELF-amd64-debug.hex2 --file ../AMD64/artifact/M1-macro-000000 --output ../AMD64/bin/untar --architecture amd64 --base-address 0x00600000 --little-endian 
+ +> ../AMD64/bin/M2-Mesoplanet --operating-system Linux --architecture amd64 -f ungz.c -o ../AMD64/bin/ungz 
+reading file: <stdio.h>
+reading file: <stdio.c>
+reading file: <stdarg.h>
+reading file: <stddef.h>
+reading file: <sys/types.h>
+reading file: <sys/stat.h>
+skipping:
+../M2libc/uefi/sys/stat.c
+reading file: <x86/linux/sys/stat.c>
+reading file: <amd64/linux/sys/stat.c>
+reading file: <armv7l/linux/sys/stat.c>
+reading file: <aarch64/linux/sys/stat.c>
+reading file: <riscv32/linux/sys/stat.c>
+reading file: <riscv64/linux/sys/stat.c>
+reading file: <knight/linux/sys/stat.c>
+reading file: <knight/native/sys/stat.c>
+reading file: <fcntl.h>
+reading file: <fcntl.c>
+skipping:
+../M2libc/uefi/fcntl.c
+reading file: <x86/linux/fcntl.c>
+reading file: <amd64/linux/fcntl.c>
+reading file: <armv7l/linux/fcntl.c>
+reading file: <aarch64/linux/fcntl.c>
+reading file: <riscv32/linux/fcntl.c>
+reading file: <riscv64/linux/fcntl.c>
+reading file: <knight/linux/fcntl.c>
+reading file: <knight/native/fcntl.c>
+reading file: <unistd.h>
+reading file: <sys/utsname.h>
+skipping:
+../M2libc/uefi/unistd.c
+reading file: <x86/linux/unistd.c>
+reading file: <amd64/linux/unistd.c>
+reading file: <armv7l/linux/unistd.c>
+reading file: <aarch64/linux/unistd.c>
+reading file: <riscv32/linux/unistd.c>
+reading file: <signal.h>
+reading file: <riscv64/linux/unistd.c>
+reading file: <knight/linux/unistd.c>
+reading file: <knight/native/unistd.c>
+reading file: <stdlib.h>
+reading file: <stdlib.c>
+reading file: <ctype.h>
+reading file: <ctype.c>
+reading file: <string.h>
+reading file: <string.c>
+reading file: "M2libc/bootstrappable.h"
+reading file: <bootstrappable.c>
+# starting M2-Planet build
+M2-Planet --file ../AMD64/artifact/M2-Mesoplanet-000000 --output ../AMD64/artifact/M2-Planet-000000 --architecture amd64 --debug 
+# starting Blood-elf stub generation
+blood-elf --file ../AMD64/artifact/M2-Planet-000000 --little-endian --output ../AMD64/artifact/blood-elf-000000 --64 
+# starting M1 assembly
+M1 --file ../M2libc/amd64/amd64_defs.M1 --file ../M2libc/amd64/libc-full.M1 --file ../AMD64/artifact/M2-Planet-000000 --little-endian --architecture amd64 --file ../AMD64/artifact/blood-elf-000000 --output ../AMD64/artifact/M1-macro-000000 
+# starting hex2 linking
+hex2 --file ../M2libc/amd64/ELF-amd64-debug.hex2 --file ../AMD64/artifact/M1-macro-000000 --output ../AMD64/bin/ungz --architecture amd64 --base-address 0x00600000 --little-endian 
+ +> ../AMD64/bin/M2-Mesoplanet --operating-system Linux --architecture amd64 -f unbz2.c -o ../AMD64/bin/unbz2 
+reading file: <stdio.h>
+reading file: <stdio.c>
+reading file: <stdarg.h>
+reading file: <stddef.h>
+reading file: <sys/types.h>
+reading file: <sys/stat.h>
+skipping:
+../M2libc/uefi/sys/stat.c
+reading file: <x86/linux/sys/stat.c>
+reading file: <amd64/linux/sys/stat.c>
+reading file: <armv7l/linux/sys/stat.c>
+reading file: <aarch64/linux/sys/stat.c>
+reading file: <riscv32/linux/sys/stat.c>
+reading file: <riscv64/linux/sys/stat.c>
+reading file: <knight/linux/sys/stat.c>
+reading file: <knight/native/sys/stat.c>
+reading file: <fcntl.h>
+reading file: <fcntl.c>
+skipping:
+../M2libc/uefi/fcntl.c
+reading file: <x86/linux/fcntl.c>
+reading file: <amd64/linux/fcntl.c>
+reading file: <armv7l/linux/fcntl.c>
+reading file: <aarch64/linux/fcntl.c>
+reading file: <riscv32/linux/fcntl.c>
+reading file: <riscv64/linux/fcntl.c>
+reading file: <knight/linux/fcntl.c>
+reading file: <knight/native/fcntl.c>
+reading file: <unistd.h>
+reading file: <sys/utsname.h>
+skipping:
+../M2libc/uefi/unistd.c
+reading file: <x86/linux/unistd.c>
+reading file: <amd64/linux/unistd.c>
+reading file: <armv7l/linux/unistd.c>
+reading file: <aarch64/linux/unistd.c>
+reading file: <riscv32/linux/unistd.c>
+reading file: <signal.h>
+reading file: <riscv64/linux/unistd.c>
+reading file: <knight/linux/unistd.c>
+reading file: <knight/native/unistd.c>
+reading file: <stdlib.h>
+reading file: <stdlib.c>
+reading file: <ctype.h>
+reading file: <ctype.c>
+reading file: <string.h>
+reading file: <string.c>
+reading file: "M2libc/bootstrappable.h"
+reading file: <bootstrappable.c>
+# starting M2-Planet build
+M2-Planet --file ../AMD64/artifact/M2-Mesoplanet-000000 --output ../AMD64/artifact/M2-Planet-000000 --architecture amd64 --debug 
+# starting Blood-elf stub generation
+blood-elf --file ../AMD64/artifact/M2-Planet-000000 --little-endian --output ../AMD64/artifact/blood-elf-000000 --64 
+# starting M1 assembly
+M1 --file ../M2libc/amd64/amd64_defs.M1 --file ../M2libc/amd64/libc-full.M1 --file ../AMD64/artifact/M2-Planet-000000 --little-endian --architecture amd64 --file ../AMD64/artifact/blood-elf-000000 --output ../AMD64/artifact/M1-macro-000000 
+# starting hex2 linking
+hex2 --file ../M2libc/amd64/ELF-amd64-debug.hex2 --file ../AMD64/artifact/M1-macro-000000 --output ../AMD64/bin/unbz2 --architecture amd64 --base-address 0x00600000 --little-endian 
+ +> ../AMD64/bin/M2-Mesoplanet --operating-system Linux --architecture amd64 -f unxz.c -o ../AMD64/bin/unxz 
+reading file: <stdio.h>
+reading file: <stdio.c>
+reading file: <stdarg.h>
+reading file: <stddef.h>
+reading file: <sys/types.h>
+reading file: <sys/stat.h>
+skipping:
+../M2libc/uefi/sys/stat.c
+reading file: <x86/linux/sys/stat.c>
+reading file: <amd64/linux/sys/stat.c>
+reading file: <armv7l/linux/sys/stat.c>
+reading file: <aarch64/linux/sys/stat.c>
+reading file: <riscv32/linux/sys/stat.c>
+reading file: <riscv64/linux/sys/stat.c>
+reading file: <knight/linux/sys/stat.c>
+reading file: <knight/native/sys/stat.c>
+reading file: <fcntl.h>
+reading file: <fcntl.c>
+skipping:
+../M2libc/uefi/fcntl.c
+reading file: <x86/linux/fcntl.c>
+reading file: <amd64/linux/fcntl.c>
+reading file: <armv7l/linux/fcntl.c>
+reading file: <aarch64/linux/fcntl.c>
+reading file: <riscv32/linux/fcntl.c>
+reading file: <riscv64/linux/fcntl.c>
+reading file: <knight/linux/fcntl.c>
+reading file: <knight/native/fcntl.c>
+reading file: <unistd.h>
+reading file: <sys/utsname.h>
+skipping:
+../M2libc/uefi/unistd.c
+reading file: <x86/linux/unistd.c>
+reading file: <amd64/linux/unistd.c>
+reading file: <armv7l/linux/unistd.c>
+reading file: <aarch64/linux/unistd.c>
+reading file: <riscv32/linux/unistd.c>
+reading file: <signal.h>
+reading file: <riscv64/linux/unistd.c>
+reading file: <knight/linux/unistd.c>
+reading file: <knight/native/unistd.c>
+reading file: <stdlib.h>
+reading file: <stdlib.c>
+reading file: <ctype.h>
+reading file: <ctype.c>
+reading file: <string.h>
+reading file: <string.c>
+reading file: <stdint.h>
+reading file: "M2libc/bootstrappable.h"
+reading file: <bootstrappable.c>
+# starting M2-Planet build
+M2-Planet --file ../AMD64/artifact/M2-Mesoplanet-000000 --output ../AMD64/artifact/M2-Planet-000000 --architecture amd64 --debug 
+# starting Blood-elf stub generation
+blood-elf --file ../AMD64/artifact/M2-Planet-000000 --little-endian --output ../AMD64/artifact/blood-elf-000000 --64 
+# starting M1 assembly
+M1 --file ../M2libc/amd64/amd64_defs.M1 --file ../M2libc/amd64/libc-full.M1 --file ../AMD64/artifact/M2-Planet-000000 --little-endian --architecture amd64 --file ../AMD64/artifact/blood-elf-000000 --output ../AMD64/artifact/M1-macro-000000 
+# starting hex2 linking
+hex2 --file ../M2libc/amd64/ELF-amd64-debug.hex2 --file ../AMD64/artifact/M1-macro-000000 --output ../AMD64/bin/unxz --architecture amd64 --base-address 0x00600000 --little-endian 
+ +> ../AMD64/bin/M2-Mesoplanet --operating-system Linux --architecture amd64 -f catm.c -o ../AMD64/bin/catm 
+reading file: <stdio.h>
+reading file: <stdio.c>
+reading file: <stdarg.h>
+reading file: <stddef.h>
+reading file: <sys/types.h>
+reading file: <sys/stat.h>
+skipping:
+../M2libc/uefi/sys/stat.c
+reading file: <x86/linux/sys/stat.c>
+reading file: <amd64/linux/sys/stat.c>
+reading file: <armv7l/linux/sys/stat.c>
+reading file: <aarch64/linux/sys/stat.c>
+reading file: <riscv32/linux/sys/stat.c>
+reading file: <riscv64/linux/sys/stat.c>
+reading file: <knight/linux/sys/stat.c>
+reading file: <knight/native/sys/stat.c>
+reading file: <fcntl.h>
+reading file: <fcntl.c>
+skipping:
+../M2libc/uefi/fcntl.c
+reading file: <x86/linux/fcntl.c>
+reading file: <amd64/linux/fcntl.c>
+reading file: <armv7l/linux/fcntl.c>
+reading file: <aarch64/linux/fcntl.c>
+reading file: <riscv32/linux/fcntl.c>
+reading file: <riscv64/linux/fcntl.c>
+reading file: <knight/linux/fcntl.c>
+reading file: <knight/native/fcntl.c>
+reading file: <unistd.h>
+reading file: <sys/utsname.h>
+skipping:
+../M2libc/uefi/unistd.c
+reading file: <x86/linux/unistd.c>
+reading file: <amd64/linux/unistd.c>
+reading file: <armv7l/linux/unistd.c>
+reading file: <aarch64/linux/unistd.c>
+reading file: <riscv32/linux/unistd.c>
+reading file: <signal.h>
+reading file: <riscv64/linux/unistd.c>
+reading file: <knight/linux/unistd.c>
+reading file: <knight/native/unistd.c>
+reading file: <stdlib.h>
+reading file: <stdlib.c>
+reading file: <ctype.h>
+reading file: <ctype.c>
+# starting M2-Planet build
+M2-Planet --file ../AMD64/artifact/M2-Mesoplanet-000000 --output ../AMD64/artifact/M2-Planet-000000 --architecture amd64 --debug 
+# starting Blood-elf stub generation
+blood-elf --file ../AMD64/artifact/M2-Planet-000000 --little-endian --output ../AMD64/artifact/blood-elf-000000 --64 
+# starting M1 assembly
+M1 --file ../M2libc/amd64/amd64_defs.M1 --file ../M2libc/amd64/libc-full.M1 --file ../AMD64/artifact/M2-Planet-000000 --little-endian --architecture amd64 --file ../AMD64/artifact/blood-elf-000000 --output ../AMD64/artifact/M1-macro-000000 
+# starting hex2 linking
+hex2 --file ../M2libc/amd64/ELF-amd64-debug.hex2 --file ../AMD64/artifact/M1-macro-000000 --output ../AMD64/bin/catm --architecture amd64 --base-address 0x00600000 --little-endian 
+ +> ../AMD64/bin/M2-Mesoplanet --operating-system Linux --architecture amd64 -f cp.c -o ../AMD64/bin/cp 
+reading file: <stdio.h>
+reading file: <stdio.c>
+reading file: <stdarg.h>
+reading file: <stddef.h>
+reading file: <sys/types.h>
+reading file: <sys/stat.h>
+skipping:
+../M2libc/uefi/sys/stat.c
+reading file: <x86/linux/sys/stat.c>
+reading file: <amd64/linux/sys/stat.c>
+reading file: <armv7l/linux/sys/stat.c>
+reading file: <aarch64/linux/sys/stat.c>
+reading file: <riscv32/linux/sys/stat.c>
+reading file: <riscv64/linux/sys/stat.c>
+reading file: <knight/linux/sys/stat.c>
+reading file: <knight/native/sys/stat.c>
+reading file: <fcntl.h>
+reading file: <fcntl.c>
+skipping:
+../M2libc/uefi/fcntl.c
+reading file: <x86/linux/fcntl.c>
+reading file: <amd64/linux/fcntl.c>
+reading file: <armv7l/linux/fcntl.c>
+reading file: <aarch64/linux/fcntl.c>
+reading file: <riscv32/linux/fcntl.c>
+reading file: <riscv64/linux/fcntl.c>
+reading file: <knight/linux/fcntl.c>
+reading file: <knight/native/fcntl.c>
+reading file: <unistd.h>
+reading file: <sys/utsname.h>
+skipping:
+../M2libc/uefi/unistd.c
+reading file: <x86/linux/unistd.c>
+reading file: <amd64/linux/unistd.c>
+reading file: <armv7l/linux/unistd.c>
+reading file: <aarch64/linux/unistd.c>
+reading file: <riscv32/linux/unistd.c>
+reading file: <signal.h>
+reading file: <riscv64/linux/unistd.c>
+reading file: <knight/linux/unistd.c>
+reading file: <knight/native/unistd.c>
+reading file: <stdlib.h>
+reading file: <stdlib.c>
+reading file: <ctype.h>
+reading file: <ctype.c>
+reading file: <string.h>
+reading file: <string.c>
+reading file: "M2libc/bootstrappable.h"
+reading file: <bootstrappable.c>
+# starting M2-Planet build
+M2-Planet --file ../AMD64/artifact/M2-Mesoplanet-000000 --output ../AMD64/artifact/M2-Planet-000000 --architecture amd64 --debug 
+# starting Blood-elf stub generation
+blood-elf --file ../AMD64/artifact/M2-Planet-000000 --little-endian --output ../AMD64/artifact/blood-elf-000000 --64 
+# starting M1 assembly
+M1 --file ../M2libc/amd64/amd64_defs.M1 --file ../M2libc/amd64/libc-full.M1 --file ../AMD64/artifact/M2-Planet-000000 --little-endian --architecture amd64 --file ../AMD64/artifact/blood-elf-000000 --output ../AMD64/artifact/M1-macro-000000 
+# starting hex2 linking
+hex2 --file ../M2libc/amd64/ELF-amd64-debug.hex2 --file ../AMD64/artifact/M1-macro-000000 --output ../AMD64/bin/cp --architecture amd64 --base-address 0x00600000 --little-endian 
+ +> ../AMD64/bin/M2-Mesoplanet --operating-system Linux --architecture amd64 -f chmod.c -o ../AMD64/bin/chmod 
+reading file: <stdio.h>
+reading file: <stdio.c>
+reading file: <stdarg.h>
+reading file: <stddef.h>
+reading file: <sys/types.h>
+reading file: <sys/stat.h>
+skipping:
+../M2libc/uefi/sys/stat.c
+reading file: <x86/linux/sys/stat.c>
+reading file: <amd64/linux/sys/stat.c>
+reading file: <armv7l/linux/sys/stat.c>
+reading file: <aarch64/linux/sys/stat.c>
+reading file: <riscv32/linux/sys/stat.c>
+reading file: <riscv64/linux/sys/stat.c>
+reading file: <knight/linux/sys/stat.c>
+reading file: <knight/native/sys/stat.c>
+reading file: <fcntl.h>
+reading file: <fcntl.c>
+skipping:
+../M2libc/uefi/fcntl.c
+reading file: <x86/linux/fcntl.c>
+reading file: <amd64/linux/fcntl.c>
+reading file: <armv7l/linux/fcntl.c>
+reading file: <aarch64/linux/fcntl.c>
+reading file: <riscv32/linux/fcntl.c>
+reading file: <riscv64/linux/fcntl.c>
+reading file: <knight/linux/fcntl.c>
+reading file: <knight/native/fcntl.c>
+reading file: <unistd.h>
+reading file: <sys/utsname.h>
+skipping:
+../M2libc/uefi/unistd.c
+reading file: <x86/linux/unistd.c>
+reading file: <amd64/linux/unistd.c>
+reading file: <armv7l/linux/unistd.c>
+reading file: <aarch64/linux/unistd.c>
+reading file: <riscv32/linux/unistd.c>
+reading file: <signal.h>
+reading file: <riscv64/linux/unistd.c>
+reading file: <knight/linux/unistd.c>
+reading file: <knight/native/unistd.c>
+reading file: <stdlib.h>
+reading file: <stdlib.c>
+reading file: <ctype.h>
+reading file: <ctype.c>
+reading file: <string.h>
+reading file: <string.c>
+reading file: "M2libc/bootstrappable.h"
+reading file: <bootstrappable.c>
+# starting M2-Planet build
+M2-Planet --file ../AMD64/artifact/M2-Mesoplanet-000000 --output ../AMD64/artifact/M2-Planet-000000 --architecture amd64 --debug 
+# starting Blood-elf stub generation
+blood-elf --file ../AMD64/artifact/M2-Planet-000000 --little-endian --output ../AMD64/artifact/blood-elf-000000 --64 
+# starting M1 assembly
+M1 --file ../M2libc/amd64/amd64_defs.M1 --file ../M2libc/amd64/libc-full.M1 --file ../AMD64/artifact/M2-Planet-000000 --little-endian --architecture amd64 --file ../AMD64/artifact/blood-elf-000000 --output ../AMD64/artifact/M1-macro-000000 
+# starting hex2 linking
+hex2 --file ../M2libc/amd64/ELF-amd64-debug.hex2 --file ../AMD64/artifact/M1-macro-000000 --output ../AMD64/bin/chmod --architecture amd64 --base-address 0x00600000 --little-endian 
+ +> ../AMD64/bin/M2-Mesoplanet --operating-system Linux --architecture amd64 -f rm.c -o ../AMD64/bin/rm 
+reading file: <stdio.h>
+reading file: <stdio.c>
+reading file: <stdarg.h>
+reading file: <stddef.h>
+reading file: <sys/types.h>
+reading file: <sys/stat.h>
+skipping:
+../M2libc/uefi/sys/stat.c
+reading file: <x86/linux/sys/stat.c>
+reading file: <amd64/linux/sys/stat.c>
+reading file: <armv7l/linux/sys/stat.c>
+reading file: <aarch64/linux/sys/stat.c>
+reading file: <riscv32/linux/sys/stat.c>
+reading file: <riscv64/linux/sys/stat.c>
+reading file: <knight/linux/sys/stat.c>
+reading file: <knight/native/sys/stat.c>
+reading file: <fcntl.h>
+reading file: <fcntl.c>
+skipping:
+../M2libc/uefi/fcntl.c
+reading file: <x86/linux/fcntl.c>
+reading file: <amd64/linux/fcntl.c>
+reading file: <armv7l/linux/fcntl.c>
+reading file: <aarch64/linux/fcntl.c>
+reading file: <riscv32/linux/fcntl.c>
+reading file: <riscv64/linux/fcntl.c>
+reading file: <knight/linux/fcntl.c>
+reading file: <knight/native/fcntl.c>
+reading file: <unistd.h>
+reading file: <sys/utsname.h>
+skipping:
+../M2libc/uefi/unistd.c
+reading file: <x86/linux/unistd.c>
+reading file: <amd64/linux/unistd.c>
+reading file: <armv7l/linux/unistd.c>
+reading file: <aarch64/linux/unistd.c>
+reading file: <riscv32/linux/unistd.c>
+reading file: <signal.h>
+reading file: <riscv64/linux/unistd.c>
+reading file: <knight/linux/unistd.c>
+reading file: <knight/native/unistd.c>
+reading file: <stdlib.h>
+reading file: <stdlib.c>
+reading file: <ctype.h>
+reading file: <ctype.c>
+reading file: <string.h>
+reading file: <string.c>
+reading file: "M2libc/bootstrappable.h"
+reading file: <bootstrappable.c>
+# starting M2-Planet build
+M2-Planet --file ../AMD64/artifact/M2-Mesoplanet-000000 --output ../AMD64/artifact/M2-Planet-000000 --architecture amd64 --debug 
+# starting Blood-elf stub generation
+blood-elf --file ../AMD64/artifact/M2-Planet-000000 --little-endian --output ../AMD64/artifact/blood-elf-000000 --64 
+# starting M1 assembly
+M1 --file ../M2libc/amd64/amd64_defs.M1 --file ../M2libc/amd64/libc-full.M1 --file ../AMD64/artifact/M2-Planet-000000 --little-endian --architecture amd64 --file ../AMD64/artifact/blood-elf-000000 --output ../AMD64/artifact/M1-macro-000000 
+# starting hex2 linking
+hex2 --file ../M2libc/amd64/ELF-amd64-debug.hex2 --file ../AMD64/artifact/M1-macro-000000 --output ../AMD64/bin/rm --architecture amd64 --base-address 0x00600000 --little-endian 
+ +> ../AMD64/bin/M2-Mesoplanet --operating-system Linux --architecture amd64 -f replace.c -o ../AMD64/bin/replace 
+reading file: <stdio.h>
+reading file: <stdio.c>
+reading file: <stdarg.h>
+reading file: <stddef.h>
+reading file: <sys/types.h>
+reading file: <sys/stat.h>
+skipping:
+../M2libc/uefi/sys/stat.c
+reading file: <x86/linux/sys/stat.c>
+reading file: <amd64/linux/sys/stat.c>
+reading file: <armv7l/linux/sys/stat.c>
+reading file: <aarch64/linux/sys/stat.c>
+reading file: <riscv32/linux/sys/stat.c>
+reading file: <riscv64/linux/sys/stat.c>
+reading file: <knight/linux/sys/stat.c>
+reading file: <knight/native/sys/stat.c>
+reading file: <fcntl.h>
+reading file: <fcntl.c>
+skipping:
+../M2libc/uefi/fcntl.c
+reading file: <x86/linux/fcntl.c>
+reading file: <amd64/linux/fcntl.c>
+reading file: <armv7l/linux/fcntl.c>
+reading file: <aarch64/linux/fcntl.c>
+reading file: <riscv32/linux/fcntl.c>
+reading file: <riscv64/linux/fcntl.c>
+reading file: <knight/linux/fcntl.c>
+reading file: <knight/native/fcntl.c>
+reading file: <unistd.h>
+reading file: <sys/utsname.h>
+skipping:
+../M2libc/uefi/unistd.c
+reading file: <x86/linux/unistd.c>
+reading file: <amd64/linux/unistd.c>
+reading file: <armv7l/linux/unistd.c>
+reading file: <aarch64/linux/unistd.c>
+reading file: <riscv32/linux/unistd.c>
+reading file: <signal.h>
+reading file: <riscv64/linux/unistd.c>
+reading file: <knight/linux/unistd.c>
+reading file: <knight/native/unistd.c>
+reading file: <stdlib.h>
+reading file: <stdlib.c>
+reading file: <ctype.h>
+reading file: <ctype.c>
+reading file: <string.h>
+reading file: <string.c>
+reading file: "M2libc/bootstrappable.h"
+reading file: <bootstrappable.c>
+# starting M2-Planet build
+M2-Planet --file ../AMD64/artifact/M2-Mesoplanet-000000 --output ../AMD64/artifact/M2-Planet-000000 --architecture amd64 --debug 
+# starting Blood-elf stub generation
+blood-elf --file ../AMD64/artifact/M2-Planet-000000 --little-endian --output ../AMD64/artifact/blood-elf-000000 --64 
+# starting M1 assembly
+M1 --file ../M2libc/amd64/amd64_defs.M1 --file ../M2libc/amd64/libc-full.M1 --file ../AMD64/artifact/M2-Planet-000000 --little-endian --architecture amd64 --file ../AMD64/artifact/blood-elf-000000 --output ../AMD64/artifact/M1-macro-000000 
+# starting hex2 linking
+hex2 --file ../M2libc/amd64/ELF-amd64-debug.hex2 --file ../AMD64/artifact/M1-macro-000000 --output ../AMD64/bin/replace --architecture amd64 --base-address 0x00600000 --little-endian 
+ +> ../AMD64/bin/M2-Mesoplanet --operating-system Linux --architecture amd64 -f wrap.c -o ../AMD64/bin/wrap 
+reading file: <fcntl.h>
+reading file: <sys/types.h>
+reading file: <stddef.h>
+reading file: <fcntl.c>
+skipping:
+../M2libc/uefi/fcntl.c
+reading file: <x86/linux/fcntl.c>
+reading file: <amd64/linux/fcntl.c>
+reading file: <armv7l/linux/fcntl.c>
+reading file: <aarch64/linux/fcntl.c>
+reading file: <riscv32/linux/fcntl.c>
+reading file: <riscv64/linux/fcntl.c>
+reading file: <knight/linux/fcntl.c>
+reading file: <knight/native/fcntl.c>
+reading file: <stdio.h>
+reading file: <stdio.c>
+reading file: <stdarg.h>
+reading file: <sys/stat.h>
+skipping:
+../M2libc/uefi/sys/stat.c
+reading file: <x86/linux/sys/stat.c>
+reading file: <amd64/linux/sys/stat.c>
+reading file: <armv7l/linux/sys/stat.c>
+reading file: <aarch64/linux/sys/stat.c>
+reading file: <riscv32/linux/sys/stat.c>
+reading file: <riscv64/linux/sys/stat.c>
+reading file: <knight/linux/sys/stat.c>
+reading file: <knight/native/sys/stat.c>
+reading file: <unistd.h>
+reading file: <sys/utsname.h>
+skipping:
+../M2libc/uefi/unistd.c
+reading file: <x86/linux/unistd.c>
+reading file: <amd64/linux/unistd.c>
+reading file: <armv7l/linux/unistd.c>
+reading file: <aarch64/linux/unistd.c>
+reading file: <riscv32/linux/unistd.c>
+reading file: <signal.h>
+reading file: <riscv64/linux/unistd.c>
+reading file: <knight/linux/unistd.c>
+reading file: <knight/native/unistd.c>
+reading file: <stdlib.h>
+reading file: <stdlib.c>
+reading file: <ctype.h>
+reading file: <ctype.c>
+reading file: <string.h>
+reading file: <string.c>
+reading file: "M2libc/bootstrappable.h"
+reading file: <bootstrappable.c>
+# starting M2-Planet build
+M2-Planet --file ../AMD64/artifact/M2-Mesoplanet-000000 --output ../AMD64/artifact/M2-Planet-000000 --architecture amd64 --debug 
+# starting Blood-elf stub generation
+blood-elf --file ../AMD64/artifact/M2-Planet-000000 --little-endian --output ../AMD64/artifact/blood-elf-000000 --64 
+# starting M1 assembly
+M1 --file ../M2libc/amd64/amd64_defs.M1 --file ../M2libc/amd64/libc-full.M1 --file ../AMD64/artifact/M2-Planet-000000 --little-endian --architecture amd64 --file ../AMD64/artifact/blood-elf-000000 --output ../AMD64/artifact/M1-macro-000000 
+# starting hex2 linking
+hex2 --file ../M2libc/amd64/ELF-amd64-debug.hex2 --file ../AMD64/artifact/M1-macro-000000 --output ../AMD64/bin/wrap --architecture amd64 --base-address 0x00600000 --little-endian 
+ +> cd .. 
+ +> ./AMD64/bin/sha256sum -c amd64.answers 
+AMD64/bin/blood-elf: OK
+AMD64/bin/catm: OK
+AMD64/bin/chmod: OK
+AMD64/bin/cp: OK
+AMD64/bin/get_machine: OK
+AMD64/bin/hex2: OK
+AMD64/bin/kaem: OK
+AMD64/bin/M1: OK
+AMD64/bin/M2-Mesoplanet: OK
+AMD64/bin/M2-Planet: OK
+AMD64/bin/match: OK
+AMD64/bin/mkdir: OK
+AMD64/bin/replace: OK
+AMD64/bin/rm: OK
+AMD64/bin/sha256sum: OK
+AMD64/bin/ungz: OK
+AMD64/bin/unbz2: OK
+AMD64/bin/unxz: OK
+AMD64/bin/untar: OK
+ +> exec ./AMD64/bin/kaem --verbose --strict --file ./after.kaem 
+ +> echo Replace me if you wish to do more 
+Replace me if you wish to do more
+[intoto-grate] attested 3 (products): 19 files, sha256 db04e1664d5a97fa9b3cb93fb4f1575c20a387cba2330e92aaf4bb48a88a1458
+[in-toto] run-end signed for the recorder: key 7f67b88053c909fd, chain of 3, head 274829de29c2337147d8feff5e7b8a69dbbc0660015869472b37e25a1087f8b3
+[intoto-grate] evidence: 3 links, head 274829de29c2337147d8feff5e7b8a69dbbc0660015869472b37e25a1087f8b3, run-end signed by the runtime

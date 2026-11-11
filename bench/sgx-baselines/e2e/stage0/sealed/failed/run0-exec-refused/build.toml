@@ -1,0 +1,11 @@
+args = ["/home/rishabhb/evid/e2e/grates/imfs-grate.cwasm", "--preload-shm", "--attest", "--dump-shm", "/home/rishabhb/stage0-seal/bin/cdrun", "/home/rishabhb/stage0-seal/src", "/home/rishabhb/stage0-seal/bin/blink", "-m", "./bootstrap-seeds/POSIX/AMD64/kaem-optional-seed"]
+
+[env]
+TMPDIR = "/tmp"
+IMFS_RESERVE_MB = "512"
+DUMPS = "/home/rishabhb/stage0-seal/src/AMD64/bin/blood-elf=out/blood-elf;/home/rishabhb/stage0-seal/src/AMD64/bin/catm=out/catm;/home/rishabhb/stage0-seal/src/AMD64/bin/chmod=out/chmod;/home/rishabhb/stage0-seal/src/AMD64/bin/cp=out/cp;/home/rishabhb/stage0-seal/src/AMD64/bin/get_machine=out/get_machine;/home/rishabhb/stage0-seal/src/AMD64/bin/hex2=out/hex2;/home/rishabhb/stage0-seal/src/AMD64/bin/kaem=out/kaem;/home/rishabhb/stage0-seal/src/AMD64/bin/M1=out/M1;/home/rishabhb/stage0-seal/src/AMD64/bin/M2-Mesoplanet=out/M2-Mesoplanet;/home/rishabhb/stage0-seal/src/AMD64/bin/M2-Planet=out/M2-Planet;/home/rishabhb/stage0-seal/src/AMD64/bin/match=out/match;/home/rishabhb/stage0-seal/src/AMD64/bin/mkdir=out/mkdir;/home/rishabhb/stage0-seal/src/AMD64/bin/replace=out/replace;/home/rishabhb/stage0-seal/src/AMD64/bin/rm=out/rm;/home/rishabhb/stage0-seal/src/AMD64/bin/sha256sum=out/sha256sum;/home/rishabhb/stage0-seal/src/AMD64/bin/ungz=out/ungz;/home/rishabhb/stage0-seal/src/AMD64/bin/unbz2=out/unbz2;/home/rishabhb/stage0-seal/src/AMD64/bin/unxz=out/unxz;/home/rishabhb/stage0-seal/src/AMD64/bin/untar=out/untar"
+
+[shm]
+preload = "/dev/shm/stage0-evid.1570148.prld"
+dump = "/dev/shm/stage0-evid.1570148.dump"
+dump_size = 268435456
