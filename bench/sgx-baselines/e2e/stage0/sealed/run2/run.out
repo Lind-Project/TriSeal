@@ -1,0 +1,38 @@
+mkpreload: 1238 files, 29410494 bytes -> /dev/shm/stage0-evid.1642804.prld
+mkpreload: archive 1 (2 files, 20792104 bytes) sha256 2f1d6ef14286dba7ba32acc8ef9360577f90cfa1b66b2b4dd063b1bcca1ca1a7
+mkpreload: archive 2 (1236 files, 8618390 bytes) sha256 4ff816e72bcaced4e41dfdee32a0061f5315ec4e30933df6ecd939ca1bad88dc
+wall 12241 rc=0
+[intoto-grate] signing key 7f67b88053c909fd5c7ed8ce30975c1b6ea81bd622235932a817b5c837226218
+[intoto-grate] attested 1 (pipeline): 2 files, sha256 2f1d6ef14286dba7ba32acc8ef9360577f90cfa1b66b2b4dd063b1bcca1ca1a7
+[intoto-grate] attested 2 (sources): 1236 files, sha256 4ff816e72bcaced4e41dfdee32a0061f5315ec4e30933df6ecd939ca1bad88dc
+[intoto-grate] attested 3 (products): 19 files, sha256 db04e1664d5a97fa9b3cb93fb4f1575c20a387cba2330e92aaf4bb48a88a1458
+[intoto-grate] evidence: 3 links, head 274829de29c2337147d8feff5e7b8a69dbbc0660015869472b37e25a1087f8b3, run-end signed by the runtime
+mkpreload: 20 files -> /home/rishabhb/stage0-seal/run2/dump
+blood-elf: OK
+catm: OK
+chmod: OK
+cp: OK
+get_machine: OK
+hex2: OK
+kaem: OK
+M1: OK
+M2-Mesoplanet: OK
+M2-Planet: OK
+match: OK
+mkdir: OK
+replace: OK
+rm: OK
+sha256sum: OK
+ungz: OK
+unbz2: OK
+unxz: OK
+untar: OK
+ANSWERS ALL OK
+quote: report data = SHA-256(identity key c4861e13b091abeb...); MRENCLAVE ec6eac41079f8511b495f6400b723f70df0ad046173ba57afc257c3bf7880f5c MRSIGNER 3eeea4fa1938fc02... (quote signature not checked here)
+run ad3d5c6d19f59e4d: run-start and run-end signed by the identity key, workload f561ee427bec3feb...
+run-end names recorder key 7f67b88053c909fd... and the last of 3 envelopes
+envelope 1 (pipeline): 2 files match the bundle
+envelope 2 (sources): 1236 files match the bundle
+envelope 3 (products): 19 files match the dump, exit status 0
+evidence verified
+STAGE0-EVID-DONE
