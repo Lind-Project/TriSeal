@@ -1,0 +1,45 @@
+[in-toto] lind-wasm-run-start.da8c7cf2bbccb8d8.intoto.json
+{
+  "payload": "eyJfdHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9TdGF0ZW1lbnQvdjEiLCJwcmVkaWNhdGUiOnsiaW52b2NhdGlvbiI6eyJhcmd2IjpbIm1haW4ud2FzbSIsIi9ob21lL3Jpc2hhYmhiL2V2aWQvZTJlL2dyYXRlcy9pbWZzLWdyYXRlLmN3YXNtIiwiLS1wcmVsb2FkLXNobSIsIi0tYXR0ZXN0IiwiLS1kdW1wLXNobSIsIi9ob21lL3Jpc2hhYmhiL3N0YWdlMC1zZWFsL2Jpbi9jZHJ1biIsIi9ob21lL3Jpc2hhYmhiL3N0YWdlMC1zZWFsL2V4ZWN0ZXN0L3N0YWdlMCIsIi9ob21lL3Jpc2hhYmhiL3N0YWdlMC1zZWFsL2Jpbi9ibGluayIsIi1tIiwiLWUiLCIuL0FNRDY0L2Jpbi9rYWVtIiwiLS12ZXJib3NlIiwiLS1zdHJpY3QiLCItLWZpbGUiLCIuL3Rlc3Qua2FlbSJdLCJjbG9jayI6eyJlcG9jaCI6MH0sImVudiI6eyJJTUZTX1JFU0VSVkVfTUIiOiI1MTIiLCJUTVBESVIiOiIvdG1wIn0sInByZWxvYWRzIjp7fX0sImtlZXAiOnsiY2VydGlmaWNhdGVzIjpbeyJzaGEyNTYiOiI0NWYyOWE2NDdiMDk1M2JhN2E2YWQ0MDEzOWIxMjE2ZTYyNTIwNWU5NzRjMjI0NDI3OGM3N2NjYjdiZjg3YTJlIn1dLCJpZGVudGl0eUtleSI6eyJzaGEyNTYiOiI0ZmY4MmNlMWUzNjg5Y2FmODYyZDk0YjFiOTNlNWY0YjQ0N2U5ZWQ1MDYxMmRjYjFjZjlhMjk2MmMwYmRlZDVlIn0sInJlcG9ydCI6eyJzaGEyNTYiOiJiZTRlZTMzZWM2NzhiMmMzNzA5ZGE0N2RlMjM2NjgyMzA5MWUxYjFiMTFhNGM4OTgwMGNiMmU1ZTcxZjg4MmRmIn0sInN0ZXdhcmQiOm51bGwsInRlY2hub2xvZ3kiOiJzZ3gifSwicnVuSWQiOiJkYThjN2NmMmJiY2NiOGQ4IiwicnVudGltZSI6eyJlbmdpbmUiOiJsaW5kLWJvb3QiLCJuYW1lIjoiZW5hcngtZXhlYy13YXNtdGltZSIsInZlcnNpb24iOiIwLjcuMSJ9LCJzaWduZXIiOnsiaXNLZWVwSWRlbnRpdHlLZXkiOnRydWUsImtleWlkIjoiNThiZjg2MmFmNDMxMGExNGM0MGIzODNkZjU2NzZkNjRjMjAzNzJiNzEyZTNiMTZlMmI4NWM5MTQ3YzMwMWQ5NSIsImtleXR5cGUiOiJlY2RzYSIsInNjaGVtZSI6ImVjZHNhLXNoYTItbmlzdHAyNTYifSwic3RhcnRlZEF0IjoiMTk3MC0wMS0wMVQwMDowMDowMC4wNjNaIn0sInByZWRpY2F0ZVR5cGUiOiJodHRwczovL2xpbmQtcHJvamVjdC5vcmcvYXR0ZXN0YXRpb24vbGluZC13YXNtL3J1bi1zdGFydC92MSIsInN1YmplY3QiOlt7ImRpZ2VzdCI6eyJzaGEyNTYiOiJmNTYxZWU0MjdiZWMzZmViY2M4ZTdiYzI2Yjk2MGEzYjgxYzg1NjA2OWJhODYxNDQxMzE0NTk0MTAzMGZhNmU1Iiwic2hhNTEyIjoiYzVkOGU2NmVlMGUxMmI2MWVlMmYyNjQxYTc0NWFhNzY4ZmJhYmNlYjI1YjI5NTM3NmI4YmYzZWQ2YWU2ZTc0MTgzMGI4YmRmNGI5NDlmMGQ4NDhkNzA4ODQyYjhhMTJkM2E4MjE5OGY4NjliZGFjZGM0ZjM1ZWUxODE1NTAxZDgifSwibmFtZSI6Im1haW4ud2FzbSJ9XX0=",
+  "payloadType": "application/vnd.in-toto+json",
+  "signatures": [
+    {
+      "keyid": "58bf862af4310a14c40b383df5676d64c20372b712e3b16e2b85c9147c301d95",
+      "sig": "MEUCIEixpYQ59qIuqZ3//pjEazychF2jeHxzqFkGhHSgYPCxAiEAm4+04Ac3kOC3Bk1UcJgITz4IjwBLviUMMxopo5x2I6Q="
+    }
+  ]
+}
+[intoto-grate] signing key 4e2d35df8526f777ca40453feb3252dfe101a03bdda289eee153b7e3f6bf3b1e
+[fork-shared-error] mremap failed: Not supported (os error 95) user=0xffffc000 parent=0x7feffd3b0000 child=0x7feeec2d6000
+[fork-shared-error] mremap failed: Not supported (os error 95) user=0xffffe000 parent=0x7feffd3b2000 child=0x7feeec2d8000
+[intoto-grate] attested 1 (pipeline): 2 files, sha256 c1aa05ee643c8aec5637c4fb5b7d6b9351b35ae00fb7cfed517194a8db61da33
+[intoto-grate] attested 2 (sources): 1384 files, sha256 fab08255317e34d6c979673de0d63cad64ae71915cd8cc279c8ebedd91b51024
+[fork-shared-error] mremap failed: Not supported (os error 95) user=0xdb6c7000 parent=0x7fedbef45000 child=0x7fecb30f9000
+[fork-shared-error] mremap failed: Not supported (os error 95) user=0xdb6c9000 parent=0x7fedbef47000 child=0x7fecb30fb000
+I1970-01-01T00:00:05.702426:blink/random.c:88:3 generating weak random data
+ +> ./AMD64/bin/sha256sum -c amd64.answers 
+AMD64/bin/blood-elf: OK
+AMD64/bin/catm: OK
+AMD64/bin/chmod: OK
+AMD64/bin/cp: OK
+AMD64/bin/get_machine: OK
+AMD64/bin/hex2: OK
+AMD64/bin/kaem: OK
+AMD64/bin/M1: OK
+AMD64/bin/M2-Mesoplanet: OK
+AMD64/bin/M2-Planet: OK
+AMD64/bin/match: OK
+AMD64/bin/mkdir: OK
+AMD64/bin/replace: OK
+AMD64/bin/rm: OK
+AMD64/bin/sha256sum: OK
+AMD64/bin/ungz: OK
+AMD64/bin/unbz2: OK
+AMD64/bin/unxz: OK
+AMD64/bin/untar: OK
+ +> exec ./AMD64/bin/kaem --verbose --strict --file ./after.kaem 
+ +> echo Replace me if you wish to do more 
+Replace me if you wish to do more
+[intoto-grate] attested 3 (products): 0 files, sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+[in-toto] run-end signed for the recorder: key 4e2d35df8526f777, chain of 3, head 7a13f95c7ab2057756cd8e6375e6ad35bd0d16e6938c778365c8b9fee7484260
+[intoto-grate] evidence: 3 links, head 7a13f95c7ab2057756cd8e6375e6ad35bd0d16e6938c778365c8b9fee7484260, run-end signed by the runtime

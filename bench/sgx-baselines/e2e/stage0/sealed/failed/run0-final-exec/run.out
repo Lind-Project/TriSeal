@@ -1,0 +1,8 @@
+mkpreload: 1238 files, 29410366 bytes -> /dev/shm/stage0-evid.1572556.prld
+mkpreload: archive 1 (2 files, 20791976 bytes) sha256 c1aa05ee643c8aec5637c4fb5b7d6b9351b35ae00fb7cfed517194a8db61da33
+mkpreload: archive 2 (1236 files, 8618390 bytes) sha256 4ff816e72bcaced4e41dfdee32a0061f5315ec4e30933df6ecd939ca1bad88dc
+wall 12181 rc=126
+[intoto-grate] signing key fe5ca872b23843d1d988c135fe0f4d0a793aafcb6c09f6083e4786da846c3c3f
+[intoto-grate] attested 1 (pipeline): 2 files, sha256 c1aa05ee643c8aec5637c4fb5b7d6b9351b35ae00fb7cfed517194a8db61da33
+[intoto-grate] attested 2 (sources): 1236 files, sha256 4ff816e72bcaced4e41dfdee32a0061f5315ec4e30933df6ecd939ca1bad88dc
+STAGE0-EVID-DONE
