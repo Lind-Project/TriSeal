@@ -75,7 +75,54 @@ pub struct Heap {
     ledger: Ledger<Access, 8188>,
 }
 
+/// Mappings at least this large are placed where the fewest pages are
+/// committed: committed pages of a new mapping are zeroed when it is handed
+/// out, and so paged in, even where the guest never touches them.
+const COLD_MIN: usize = 256 << 20;
+
 impl Heap {
+    /// Find a free range, lowest gap first, that overlaps the fewest
+    /// committed pages. Each gap is tried from its top down, in steps of
+    /// `length`, leaving 1 GiB of room above `brk`.
+    fn find_free_cold(&self, length: Offset<usize, Page>) -> Option<Address<usize, Page>> {
+        let records = self.ledger.records();
+        let room = Offset::<usize, Page>::from_items((1 << 30) / Page::SIZE);
+        let mut best: Option<(usize, Address<usize, Page>)> = None;
+        'gaps: for i in 0..=records.len() {
+            let mut start = if i == 0 {
+                self.span.start
+            } else {
+                records[i - 1].region.end
+            };
+            let end = if i == records.len() {
+                self.span.end
+            } else {
+                records[i].region.start
+            };
+            if start <= self.brk_region.end && end > self.brk_region.end {
+                start = self.brk_region.end + room;
+            }
+            let mut top = end;
+            for _ in 0..8 {
+                if top <= start || top - start < length {
+                    break;
+                }
+                let addr = top - length;
+                let limit = best.map_or(usize::MAX, |(n, _)| n);
+                let n = crate::committed::count(addr.raw(), top.raw(), limit);
+                if n < limit {
+                    best = Some((n, addr));
+                    if n == 0 {
+                        break 'gaps;
+                    }
+                }
+                top = addr;
+            }
+        }
+        best.map(|(_, addr)| addr)
+            .or_else(|| self.ledger.find_free_back(length))
+    }
+
     /// Create a new instance.
     pub fn new(addr: Address<usize, Page>, length: Offset<usize, Page>) -> Self {
         Self {
@@ -153,7 +200,13 @@ impl Heap {
         length: Offset<usize, Page>,
         access: Access,
     ) -> Option<Address<usize, Page>> {
-        let addr = addr.or_else(|| self.ledger.find_free_back(length))?;
+        let addr = addr.or_else(|| {
+            if length.bytes() >= COLD_MIN {
+                self.find_free_cold(length)
+            } else {
+                self.ledger.find_free_back(length)
+            }
+        })?;
         self.ledger.map(addr, length, access).ok()?;
         Some(addr)
     }
