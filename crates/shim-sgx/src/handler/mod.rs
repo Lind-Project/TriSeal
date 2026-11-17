@@ -154,6 +154,7 @@ const SYS_PRCTL: i64 = 157;
 const SYS_GETTID: i64 = 186;
 const SYS_TKILL: i64 = 200;
 const SYS_PROCESS_VM_WRITEV: i64 = 311;
+const SYS_CLOCK_NANOSLEEP: i64 = 230;
 
 const CLOCK_PROCESS_CPUTIME_ID: clockid_t = 2;
 const CLOCK_THREAD_CPUTIME_ID: clockid_t = 3;
@@ -187,6 +188,8 @@ fn sealed_allows(nr: i64, arg0: u64) -> bool {
         SYS_getuid | SYS_geteuid | SYS_getgid | SYS_getegid => true,
         // Clocks (from the TSC) and random numbers (RDRAND).
         SYS_clock_gettime | SYS_getrandom => true,
+        // Sleeping: the keep waits on its own clock.
+        sallyport::libc::SYS_nanosleep | SYS_CLOCK_NANOSLEEP => true,
         // Console output, and what a program asks about its standard
         // streams, which the shim answers itself (no tty, a pipe).
         SYS_write | SYS_writev => console,
@@ -941,6 +944,24 @@ impl guest::Handler for Handler<'_> {
         Ok(())
     }
 
+    fn nanosleep(
+        &mut self,
+        req: &timespec,
+        rem: Option<&mut timespec>,
+    ) -> sallyport::Result<()> {
+        if !SEALED.load(Ordering::Acquire) {
+            return self.execute(sys::Nanosleep { req, rem })?;
+        }
+        // A sealed keep does not ask the host to sleep: it waits on its
+        // own clock, like a futex wait with a timeout.
+        let deadline = self.clock_ns(false).saturating_add(timespec_ns(req));
+        let mut spins = 1;
+        while clock::now_ns(false) < deadline {
+            spins = backoff(spins);
+        }
+        Ok(())
+    }
+
     fn sched_yield(&mut self) -> sallyport::Result<()> {
         core::hint::spin_loop();
         Ok(())
@@ -1615,6 +1636,35 @@ impl<'a> Handler<'a> {
                     Ok([rax, rdx]) => {
                         self.ssa.gpr.rax = rax as u64;
                         self.ssa.gpr.rdx = rdx as u64;
+                    }
+                }
+            }
+            SYS_CLOCK_NANOSLEEP if SEALED.load(Ordering::Acquire) => {
+                // clock_nanosleep(clock, flags, req, rem) without
+                // TIMER_ABSTIME is nanosleep(req, rem), served above.
+                let ret = if self.ssa.gpr.rsi != 0 {
+                    Err(ENOTSUP)
+                } else {
+                    unsafe {
+                        self.syscall(
+                            &usermemscope,
+                            [
+                                sallyport::libc::SYS_nanosleep as usize,
+                                self.ssa.gpr.rdx as usize,
+                                self.ssa.gpr.r10 as usize,
+                                0,
+                                0,
+                                0,
+                                0,
+                            ],
+                        )
+                    }
+                };
+                match ret {
+                    Err(e) => self.ssa.gpr.rax = -e as u64,
+                    Ok([rax, _]) => {
+                        self.ssa.gpr.rax = rax as u64;
+                        self.ssa.gpr.rdx = orig_rdx;
                     }
                 }
             }
