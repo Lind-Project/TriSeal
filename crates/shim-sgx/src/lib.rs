@@ -14,6 +14,10 @@
 #![deny(missing_docs)]
 #![warn(rust_2018_idioms)]
 
+pub mod clock;
+pub mod committed;
+pub mod console;
+pub mod direct;
 pub mod entry;
 pub mod handler;
 pub mod heap;
@@ -39,9 +43,10 @@ pub const CSSA_1_PLUS_STACK_SIZE: usize =
 
 /// Defines the size of the enclave address space
 ///
-/// This is now 16GB, enough for wasmtime to allocate 8GB of memory for the wasm payload
-/// and still have some memory left for the shim and the stack.
-pub const ENCL_SIZE_BITS: u8 = 34;
+/// 2^38 bytes (256 GiB). Every lind cage reserves 4 GiB or more of it, and a
+/// build that runs make, a shell and the compiler under its grates holds more
+/// cages at once than 2^36 bytes had room for.
+pub const ENCL_SIZE_BITS: u8 = 38;
 /// Defines the size of the enclave address space
 pub const ENCL_SIZE: usize = 1 << ENCL_SIZE_BITS;
 

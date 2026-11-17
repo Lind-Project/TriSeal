@@ -1,0 +1,40 @@
+# Modules lind may load in this runtime: `sha256sum` lines (SHA-256 of the
+# module file, then a name for people). build.rs compiles them into
+# enarx-exec-wasmtime, so they are part of the keep's measurement; a module
+# whose SHA-256 is not here ends the run. Build with ENARX_CWASM_ALLOWLIST=<file>
+# to use another list. `lind-boot --precompile --explicit-bounds-checks`
+# reproduces each .cwasm from its .wasm byte for byte, so every entry can be
+# audited.
+#
+# Every module is compiled with explicit bounds checks and no guard regions
+# (the shim maps every page readable, so a guard region would not stop an
+# access out of bounds); the engine in the keep refuses a module compiled
+# otherwise. Precompiled on lind-server-3 (~/sgx-bench), 2026-10-17, with the
+# lind-boot of lind-wasm explicit-bounds-checks (enarx-7-13 52bbb8798 + the
+# --explicit-bounds-checks option); without the option the same lind-boot
+# reproduces the previous list from the same .wasm files.
+#
+# Grates: lind-wasm-example-grates main b9ae5df, `cargo-lind_compile --release`
+# in grates-main/rust-grates/<grate> (the .wasm also depends on the directory
+# it is built in).
+7d380e6992d96d7fc106dd04272970e9203d827b7a2bfcc5696e581653ebeb31  imfs-grate.cwasm
+9c1b9e8cb5f05beb170ccbe67c9c479eb65f2f6612e1eadaa557445e48e7d8cd  intoto-grate.cwasm
+58e064f07f1bd0b3bf90a40dc1cb701bc75d150d8c26f8f4ce366460d5330ea3  ipc-grate.cwasm
+# The build toolchain (e2e/root-ebc/usr/local/bin: make, gcc, ar and ranlib
+# from e2e/wasm/*.opt.wasm, cc1, as and ld without asyncify from
+# e2e/noasync/*.noasync.wasm) and the in-toto CLI.
+9e06e46bf12ed676be443f537b9d68f32d55f3220a966638d3e6eaeea9e6be07  make
+ccc5342023d4284a8c0d6c4e17fe8ffa60c4fa5c8232202c9e7a3a93265687ee  gcc
+4c0c771adb70c52a1d5018a6a38b5afce3bf0657c5dea9bba0f7e1045acf1ffb  cc1
+ebf5df711fdbb07c3d11e9b105e79f34dde117ecbebe675cb000dc778dec83d8  as
+0277778255fe808fa6e1841d07fdf723427fa9ef96632f390bc84b235fe6c290  ld
+cd4f3a271d8416216ebf9c6cc92fc0f8813fa4b309817caa547a80287136d8fe  ar
+cfbec9973b517b5c31478cb87b87e78356ebba1eb7216eaa4e6885c46921fa43  ranlib
+a4ff0f421aaff59df68003134bc013f438806fb871de92021959041f36bd917e  in-toto-cli.cwasm
+# Programs the evaluation scripts run (triseal/build): two builds in one keep,
+# and the microbenchmarks with the programs they exec.
+bb9f8c7aa6a659eb0235733ce0eef67c30fe6ce9c685f0ecf4a5907d32ab2b00  twobuild.cwasm
+5e3ba580474dbd0ac80f9e813bce9c1a3290cda33a4c0ea6a3241a41254ab9ef  microbench.cwasm
+029e429079351044a355a64261855b7f588c9948d4b93c91330024ecb0ccf135  hello.cwasm
+8c8ebd7056e3c8ec41cb13debc3b414a8b15f3d009c48d81a9bab26ec32c9c08  nop.cwasm
+b6cfe664241678c891f27105b73b9e44690323beb06bff3debf1c565b4d0fccd  handoff.cwasm

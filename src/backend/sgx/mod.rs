@@ -7,6 +7,8 @@ mod data;
 mod enarxcall;
 mod hasher;
 mod ioctls;
+pub(crate) mod shared;
+pub mod stats;
 mod thread;
 
 use super::Loader;

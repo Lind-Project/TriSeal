@@ -8,7 +8,7 @@
 #![deny(clippy::all)]
 #![warn(rust_2018_idioms)]
 
-use std::{collections::HashMap, ops::Deref};
+use std::{collections::HashMap, ops::Deref, path::PathBuf};
 
 use serde::{de::Error as _, Deserialize, Deserializer, Serialize};
 use url::Url;
@@ -29,6 +29,16 @@ pub const CONFIG_TEMPLATE: &str = r#"## Configuration for a WASI application in 
 # [env]
 # VAR1 = "var1"
 # VAR2 = "var2"
+
+## in-toto attestation of the run (written to stderr when `dir` is unset)
+# [intoto]
+# dir = "/var/lib/enarx/attestations"
+# stderr = false
+# disabled = false
+
+## Date the real-time clock reads when the workload starts (the host's is never used)
+# [clock]
+# epoch = 1760659200   # seconds since 1970-01-01T00:00:00Z
 
 ## Pre-opened file descriptors
 [[files]]
@@ -151,6 +161,64 @@ pub struct Config {
     /// The environment variables to provide to the application
     #[serde(default)]
     pub env: HashMap<String, String>,
+
+    /// Shared-memory preload and dump regions for lind
+    #[serde(default)]
+    pub shm: Option<Shm>,
+
+    /// in-toto attestation of the workload run
+    #[serde(default)]
+    pub intoto: InToto,
+
+    /// The real-time clock of the workload run
+    #[serde(default)]
+    pub clock: Clock,
+}
+
+/// The real-time clock of the workload run
+///
+/// The keep never asks the host for the time of day: the real-time clock
+/// reads `epoch` when the workload starts and advances from there with the
+/// TSC, and the monotonic clock starts at 0. The epoch is thus an input of
+/// the run like its arguments, and `run-start` records it with them.
+///
+/// ```toml
+/// [clock]
+/// epoch = 1760659200   # seconds since 1970-01-01T00:00:00Z (default 0)
+/// ```
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Clock {
+    /// Seconds since the Unix epoch that the real-time clock reads when the
+    /// workload starts (as `SOURCE_DATE_EPOCH` gives a build its date)
+    #[serde(default)]
+    pub epoch: u64,
+}
+
+/// Host files mapped outside the keep before lind starts, for a grate to
+/// read its preloads from and write its dump archive to without leaving the
+/// keep (see lind-wasm's `rawposix::shm`).
+///
+/// ```toml
+/// [shm]
+/// preload = "/dev/shm/lua.prld"   # a bundle of preload archives (mkpreload)
+/// dump = "/dev/shm/lua.dump"      # created; truncated to the dump's length
+/// dump_size = 268435456            # capacity of the dump region in bytes
+/// ```
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Shm {
+    /// Host path of the preload bundle, mapped read-only
+    #[serde(default)]
+    pub preload: Option<String>,
+
+    /// Host path the dump archive is written to
+    #[serde(default)]
+    pub dump: Option<String>,
+
+    /// Capacity of the dump region in bytes (default 256 MiB)
+    #[serde(default)]
+    pub dump_size: Option<u64>,
 }
 
 impl Default for Config {
@@ -166,8 +234,36 @@ impl Default for Config {
             args: vec![],
             files,
             steward: None, // TODO: Default to a deployed Steward instance
+            shm: None,
+            intoto: InToto::default(),
+            clock: Clock::default(),
         }
     }
+}
+
+/// in-toto attestation of the workload run
+///
+/// Two DSSE-wrapped in-toto statements are produced per run, signed with the keep
+/// identity key: `run-start` right before the lind-wasm runtime starts and `run-end`
+/// right after it ends.
+///
+/// See the [crate] documentation for the file layout.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InToto {
+    /// Do not produce attestations
+    #[serde(default)]
+    pub disabled: bool,
+
+    /// Directory the attestations are written to
+    ///
+    /// The path is resolved by the host. When unset, attestations are printed to stderr.
+    #[serde(default)]
+    pub dir: Option<PathBuf>,
+
+    /// Also print the attestations to stderr when `dir` is set
+    #[serde(default)]
+    pub stderr: bool,
 }
 
 /// `/dev/null` file descriptor

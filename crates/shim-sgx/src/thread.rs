@@ -4,7 +4,7 @@
 
 use core::arch::asm;
 use core::ptr::NonNull;
-use core::sync::atomic::{AtomicI32, AtomicU32};
+use core::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicUsize, Ordering};
 use primordial::Page;
 
 use crate::{CSSA_0_STACK_SIZE, CSSA_1_PLUS_STACK_SIZE, NUM_SSA};
@@ -44,6 +44,11 @@ impl<const N: usize, T: Sized + Copy> ConstVecDequeue<N, T> {
         Ok(())
     }
 
+    /// Whether the queue is empty.
+    pub fn is_empty(&self) -> bool {
+        self.count == 0
+    }
+
     /// Pop a record from the front of the queue.
     pub fn pop(&mut self) -> Option<T> {
         if self.count == 0 {
@@ -79,11 +84,73 @@ pub enum NewThread {
 }
 
 /// Queue of new threads to be picked up
-pub static NEW_THREAD_QUEUE: Lazy<RwLock<ConstVecDequeue<10, NewThread>>> = Lazy::new(|| {
+pub static NEW_THREAD_QUEUE: Lazy<RwLock<ConstVecDequeue<64, NewThread>>> = Lazy::new(|| {
     let mut queue = ConstVecDequeue::default();
     queue.push(NewThread::Main).unwrap();
     RwLock::new(queue)
 });
+
+/// Number of threads started up front to wait in the enclave for work, so
+/// that `clone()` does not have to ask the host for a new thread. Each one
+/// spins while it waits, so this trades CPU time for ocalls: 5 is the
+/// smallest pool with which a Lua build under the in-toto and imfs grates
+/// needs no `Spawn` (4 is enough under the imfs grate alone, 2 is not).
+pub const POOL_THREADS: usize = 5;
+
+/// Whether the pool has been started (on the first `clone()`).
+pub static POOL_STARTED: AtomicBool = AtomicBool::new(false);
+
+/// Pool threads spawned on the host that have not entered the enclave yet.
+pub static POOL_PENDING: AtomicUsize = AtomicUsize::new(0);
+
+/// Threads waiting in the enclave for work, minus the work already promised
+/// to them. `clone()` may queue a new thread without spawning one on the
+/// host only if it can take one of these.
+static IDLE: AtomicUsize = AtomicUsize::new(0);
+
+/// Upper bound of the spin backoff, in `pause` instructions (~50 µs).
+pub const MAX_SPIN: u32 = 1024;
+
+/// Spin for `spins` pauses and return the next backoff.
+#[inline]
+pub fn backoff(spins: u32) -> u32 {
+    for _ in 0..spins {
+        core::hint::spin_loop();
+    }
+    (spins * 2).min(MAX_SPIN)
+}
+
+/// Mark the calling thread as waiting for work.
+pub fn add_idle() {
+    IDLE.fetch_add(1, Ordering::SeqCst);
+}
+
+/// Promise a queued thread to one of the waiting threads, if there is one.
+pub fn take_idle() -> bool {
+    IDLE.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
+        .is_ok()
+}
+
+/// Whether the calling thread was spawned to fill the pool (and has no work
+/// waiting for it).
+pub fn take_pool_pending() -> bool {
+    POOL_PENDING
+        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
+        .is_ok()
+}
+
+/// Wait in the enclave until a new thread is queued, and take it.
+pub fn wait_new_thread() -> NewThread {
+    let mut spins = 1;
+    loop {
+        if !NEW_THREAD_QUEUE.read().is_empty() {
+            if let Some(thread) = NEW_THREAD_QUEUE.write().pop() {
+                return thread;
+            }
+        }
+        spins = backoff(spins);
+    }
+}
 
 /// SGX Thread Control Structure
 ///
@@ -202,10 +269,25 @@ pub struct ReturnToMain {
 }
 
 /// Thread Control Block
+///
+/// While a thread runs the payload, its GS base points at its TCB, so that
+/// the direct syscall entry can find it (the payload does not use GS).
 #[derive(Default)]
+#[repr(C)]
 pub struct Tcb {
-    /// State to return to CSSA[0]
+    /// State to return to CSSA[0]. Must stay the first field: the payload
+    /// entry code passes its address as the address of the TCB.
     pub return_to_main: ReturnToMain,
+    /// The sallyport block the host gives this thread at CSSA 0 and 1.
+    pub block: usize,
+    /// Set by an `exit_group()` taken through the direct syscall entry: the
+    /// thread returns to the shim's thread loop, which then leaves the enclave.
+    pub exit_group: Option<i32>,
+    /// Set while the shim makes one of the few requests to the host that a
+    /// sealed keep still makes for this thread (see `handler::SEALED`). In
+    /// the TCB, not the handler, because a syscall taken through the direct
+    /// entry reaches the host from a second handler, entered for `SYS_SALLY`.
+    pub host_permit: bool,
     /// The thread ID
     pub tid: pid_t,
     /// Holds addresses of AtomicU32 to clear on exiting the thread
@@ -244,6 +326,7 @@ impl LoadRegsExt for GenPurposeRegs {
             "lea rcx,         [rip + 2f]         ",
             "mov [rdx + 4*8], rcx                ", // tcb.rip = label 2
             "mov [rdx + 5*8], rsp                ", // tcb.rsp
+            "wrgsbase rdx                        ", // GS base = the TCB
             "mov rsp, rax                        ", // switch stack pointer
             "pop rax                             ", // skip rax
             "pop rcx                             ",
